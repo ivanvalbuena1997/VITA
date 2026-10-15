@@ -7,6 +7,7 @@ import { importarCopias, volumenSesion, kcalDia } from "./import.js";
 import { crearCopia, esCopiaVita, descargar } from "./backup.js";
 import { icon, logo } from "./icons.js";
 import * as EN from "./entreno.js";
+import { GOOGLE_CLIENT_ID } from "./config.js";
 
 /* Modo local (solo en localhost con ?local): datos en memoria, sin Firebase.
    Sirve para probar la interfaz; nunca se usa en la app publicada. */
@@ -78,23 +79,68 @@ function estadoSync() {
 }
 
 /* ---------- pantallas ---------- */
-function pantallaLogin(error) {
+/* Botón oficial de Google (Google Identity Services): entra sin ventanas
+   emergentes ni redirecciones, que en el móvil pueden quedarse colgadas. */
+let gisListo = null;
+function cargarGIS() {
+  if (gisListo) return gisListo;
+  gisListo = new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = "https://accounts.google.com/gsi/client"; s.async = true;
+    s.onload = () => {
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: r => DB.entrarConToken(r.credential).catch(e => pantallaLogin(mensajeError(e)))
+      });
+      res();
+    };
+    s.onerror = () => { gisListo = null; rej(new Error("No se pudo cargar el botón de Google.")); };
+    document.head.appendChild(s);
+  });
+  return gisListo;
+}
+
+function pantallaLogin(error, nota) {
+  const conGIS = !!GOOGLE_CLIENT_ID && !MODO_LOCAL;
   document.body.innerHTML = `
   <div class="login">
     ${logo(120)}
     <div class="brand-name">V.I.T.A.</div>
     <p>Entreno, comida y actividad en un solo sitio, sincronizado entre el móvil y el ordenador.</p>
-    <button class="btn primary" id="entrar">Entrar con Google</button>
+    ${conGIS ? `<div id="gbtn" class="gbtn"></div>` : ""}
+    <button class="btn ${conGIS ? "" : "primary"}" id="entrar">${conGIS ? "Otra forma: ventana de Google" : "Entrar con Google"}</button>
     ${error ? `<p class="err">${esc(error)}</p>` : ""}
+    ${nota ? `<p class="muted">${esc(nota)}</p>` : ""}
     <p class="muted">v${APP_VERSION}${MODO_LOCAL ? " · modo local de prueba" : ""}</p>
   </div>
   <div id="update"></div>
   <div id="toast"></div>`;
   pintarAvisoVersion();
+  if (conGIS) cargarGIS().then(() => {
+    const host = $("gbtn"); if (!host) return;
+    window.google.accounts.id.renderButton(host, {
+      type: "standard", theme: temaActual() === "claro" ? "outline" : "filled_black",
+      size: "large", text: "continue_with", shape: "pill", locale: "es", width: 280
+    });
+  }).catch(e => { const h = $("gbtn"); if (h) h.innerHTML = `<p class="err">${esc(e.message)}</p>`; });
+
   $("entrar").onclick = async () => {
-    $("entrar").disabled = true;
+    const b = $("entrar"); b.disabled = true;
+    // Si vuelves de la ventana de Google y no ha entrado en unos segundos,
+    // se libera el botón en vez de dejarlo pulsado sin hacer nada.
+    const vigia = () => {
+      if (document.hidden) return;
+      setTimeout(() => {
+        if (S.user || !$("entrar") || !$("entrar").disabled) return;
+        document.removeEventListener("visibilitychange", vigia);
+        pantallaLogin(null, conGIS
+          ? "La ventana de Google no ha devuelto el control. Usa el botón «Continuar con Google» de arriba."
+          : "La ventana de Google no ha devuelto el control. Vuelve a intentarlo; si se repite, avísame qué navegador usas.");
+      }, 6000);
+    };
+    document.addEventListener("visibilitychange", vigia);
     try { await DB.entrar(); }
-    catch (e) { pantallaLogin(mensajeError(e)); }
+    catch (e) { document.removeEventListener("visibilitychange", vigia); pantallaLogin(mensajeError(e)); }
   };
 }
 function mensajeError(e) {
@@ -103,7 +149,8 @@ function mensajeError(e) {
   if (c === "auth/unauthorized-domain") return "Este dominio no está autorizado en Firebase (Authentication → Configuración → Dominios autorizados).";
   if (c === "auth/network-request-failed") return "No hay conexión. La primera entrada necesita internet.";
   if (c === "permission-denied") return "Firebase ha rechazado el acceso. Revisa que entras con tu cuenta y que las reglas de Firestore están publicadas.";
-  return (e && e.message) || "Error desconocido";
+  if (c === "auth/invalid-credential") return "Google ha dado un acceso que Firebase no acepta. Revisa que el ID de cliente web es el del proyecto vita-75aab.";
+  return ((e && e.message) || "Error desconocido") + (c ? ` (${c})` : "");
 }
 
 function esqueleto() {

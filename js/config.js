@@ -13,3 +13,10 @@ export const firebaseConfig = {
 /* Versión del SDK web de Firebase (la que generó la consola). Si se cambia,
    hay que subir también la versión de la caché en sw.js. */
 export const FIREBASE_SDK = "13.0.0";
+
+/* «ID de cliente web» de Google (Firebase → Authentication → Método de acceso →
+   Google → Configuración del SDK web). Tampoco es secreto. Con él, la entrada
+   usa el botón oficial de Google dentro de la página, sin ventanas ni
+   redirecciones, que es lo que mejor funciona en el móvil. Vacío = solo la
+   ventana emergente de Firebase. */
+export const GOOGLE_CLIENT_ID = "";

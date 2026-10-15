@@ -280,3 +280,4 @@ main { flex: 1; width: 100%; max-width: 760px; margin: 0 auto; padding: 14px 16p
 body:has(#rest .rest) main { padding-bottom: 176px; }
 .aviso-version { position: fixed; left: 50%; transform: translateX(-50%); top: calc(76px + env(safe-area-inset-top)); z-index: 60; display: flex; align-items: center; gap: 10px; width: min(480px, calc(100vw - 24px)); padding: 10px 12px 10px 14px; background: var(--surf); border: 1px solid var(--acc); border-radius: 14px; box-shadow: var(--glow-box), 0 8px 24px rgba(0, 0, 0, 0.35); font-weight: 600; }
 .aviso-version span { flex: 1; }
+.gbtn { min-height: 44px; display: flex; justify-content: center; color-scheme: normal; }

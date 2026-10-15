@@ -16,6 +16,7 @@ const emitir = () => {
 export async function iniciarFirebase() { return {}; }
 export const alCambiarUsuario = cb => { userCb = cb; cb(null); };
 export async function entrar() { userCb && userCb(usuario); }
+export async function entrarConToken() { userCb && userCb(usuario); }
 export const resultadoRedireccion = async () => null;
 export async function salir() { oyente = null; userCb && userCb(null); }
 export function escuchar(uid, onDatos) { oyente = onDatos; setTimeout(emitir, 50); return () => { oyente = null; }; }

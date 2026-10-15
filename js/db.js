@@ -52,6 +52,10 @@ export async function entrar() {
     else throw e;
   }
 }
+/* Entrar con el token que da el botón de Google (Google Identity Services) */
+export async function entrarConToken(idToken) {
+  await F.au.signInWithCredential(F.auth, F.au.GoogleAuthProvider.credential(idToken));
+}
 export const resultadoRedireccion = () => F.au.getRedirectResult(F.auth);
 export const salir = () => F.au.signOut(F.auth);
 
