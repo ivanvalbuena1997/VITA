@@ -88,7 +88,9 @@ function pantallaLogin(error) {
     ${error ? `<p class="err">${esc(error)}</p>` : ""}
     <p class="muted">v${APP_VERSION}${MODO_LOCAL ? " · modo local de prueba" : ""}</p>
   </div>
+  <div id="update"></div>
   <div id="toast"></div>`;
+  pintarAvisoVersion();
   $("entrar").onclick = async () => {
     $("entrar").disabled = true;
     try { await DB.entrar(); }
@@ -121,6 +123,7 @@ function esqueleto() {
   <div id="update"></div>
   <div id="toast"></div>`;
   $("tema").onclick = () => cambiarTema(temaActual() === "claro" ? "oscuro" : "claro");
+  pintarAvisoVersion();
 }
 
 /* Mientras escribes en un campo de la pantalla, los repintados que llegan de
@@ -393,19 +396,29 @@ async function arrancar() {
   });
 }
 
-/* Service worker: avisa cuando hay versión nueva en vez de cambiarla a escondidas */
+/* Service worker y versiones nuevas:
+   - Al abrir la app, si ya hay una versión nueva descargada, se aplica sola
+     (lo hace también index.html, que siempre llega fresco de la red).
+   - Si la versión nueva llega con la app abierta, aparece «Actualizar» y el
+     aviso se mantiene aunque cambies de pestaña o se repinte la pantalla. */
+let swNuevo = null;
+function pintarAvisoVersion() {
+  const host = $("update"); if (!host) return;
+  host.innerHTML = swNuevo ? `<div class="aviso-version" role="status">${icon("sync", 20, "var(--acc)")}<span>Hay una versión nueva de V.I.T.A.</span><button class="btn primary sm" id="actualizar">Actualizar</button></div>` : "";
+  const b = $("actualizar");
+  if (b) b.onclick = () => { EN.guardarYa(); b.disabled = true; swNuevo.postMessage("activar"); };
+}
 if ("serviceWorker" in navigator && location.protocol.startsWith("http") && !MODO_LOCAL) {
   navigator.serviceWorker.register("sw.js").then(reg => {
-    const avisar = w => {
-      const host = $("update"); if (!host) return;
-      host.innerHTML = `<div class="toast" style="bottom:auto;top:76px;display:flex;gap:10px;align-items:center">Hay una versión nueva<button class="btn primary" id="actualizar">Actualizar</button></div>`;
-      $("actualizar").onclick = () => w.postMessage("activar");
-    };
-    if (reg.waiting && navigator.serviceWorker.controller) avisar(reg.waiting);
+    if (reg.waiting && navigator.serviceWorker.controller) { reg.waiting.postMessage("activar"); return; }
     reg.addEventListener("updatefound", () => {
       const w = reg.installing;
-      w && w.addEventListener("statechange", () => { if (w.state === "installed" && navigator.serviceWorker.controller) avisar(w); });
+      w && w.addEventListener("statechange", () => {
+        if (w.state === "installed" && navigator.serviceWorker.controller) { swNuevo = w; pintarAvisoVersion(); }
+      });
     });
+    // Una PWA puede quedarse abierta días: al volver a ella, se busca versión nueva
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update().catch(() => {}); });
   }).catch(() => {});
   let recargado = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => { if (!recargado) { recargado = true; location.reload(); } });

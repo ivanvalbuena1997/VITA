@@ -20,6 +20,18 @@
 <body>
 <div class="login"><p class="muted">Cargando V.I.T.A.…</p></div>
 <noscript><p style="padding:24px">V.I.T.A. necesita JavaScript.</p></noscript>
+<script>
+  // Si hay una versión nueva ya descargada, se aplica al abrir la app.
+  // Este archivo siempre llega fresco de la red, así que también rescata
+  // versiones antiguas de la app que no llegaban a mostrar el aviso.
+  if ("serviceWorker" in navigator && location.search.indexOf("local") < 0) {
+    var vitaRecarga = false;
+    navigator.serviceWorker.addEventListener("controllerchange", function () { if (!vitaRecarga) { vitaRecarga = true; location.reload(); } });
+    navigator.serviceWorker.getRegistration().then(function (r) {
+      if (r && r.waiting && navigator.serviceWorker.controller) r.waiting.postMessage("activar");
+    }).catch(function () {});
+  }
+</script>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>

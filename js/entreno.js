@@ -39,6 +39,15 @@ const COLORES = {
   "Antebrazo": "#E0E07A", "Cuádriceps": "#8F9CFF", "Femoral/Glúteo": "#C38CFF", "Gemelos": "#6EE7A8", "Core": "#9DBDC7"
 };
 
+/* Color de grupo: etiqueta rellena y franja lateral (con varios grupos, a tramos) */
+const colorDe = g => COLORES[g] || "#9DBDC7";
+const tag = g => `<span class="tag" style="--c:${colorDe(g)}">${C.esc(g)}</span>`;
+function franja(grupos) {
+  const gs = Object.keys(grupos || {}); if (!gs.length) return "";
+  const paso = 100 / gs.length;
+  return `--franja:linear-gradient(to bottom,${gs.map((g, k) => `${colorDe(g)} ${(k * paso).toFixed(2)}% ${((k + 1) * paso).toFixed(2)}%`).join(",")})`;
+}
+
 const sesiones = () => C.S.sesiones;
 const sesionDe = f => sesiones().find(s => s.fecha === f) || null;
 const ejercicioDe = id => C.S.ejercicios.find(e => e.id === id) || null;
@@ -220,11 +229,11 @@ function vEjercicio(s, e, i, n, prev) {
   const ref = mejorPrevio(e.ejercicioId, s.fecha);
   const prevE = prev ? prev.ejercicios.find(x => x.ejercicioId === e.ejercicioId) : null;
   const grupos = Object.keys(e.grupos || {});
-  return `<div class="card ej">
+  return `<div class="card ej franja" style="${franja(e.grupos)}">
     <div class="ej-head">
       <button class="ej-tit" data-e="plegar" data-id="${e.ejercicioId}" aria-expanded="${abierto}">
         <span class="ej-nombre">${C.esc(e.nombre)}</span>
-        <span class="tags">${grupos.map(g => `<span class="tag" style="--c:${COLORES[g] || "var(--dim)"}">${C.esc(g)}</span>`).join("")}${e.unilateral ? `<span class="tag line">×2 unilateral</span>` : ""}</span>
+        <span class="tags">${grupos.map(tag).join("")}${e.unilateral ? `<span class="tag line">×2 unilateral</span>` : ""}</span>
       </button>
       <span class="ej-count mono">${hechas}/${e.series.length}</span>
     </div>
@@ -266,7 +275,7 @@ function vCopiar() {
     const gs = Object.entries(porG).sort((a, b) => b[1] - a[1]).slice(0, 4).map(g => g[0]);
     return `<button class="item" data-e="copiar" data-f="${x.fecha}">
       <span class="item-main"><b>${C.esc(C.fecha(x.fecha))}</b><span class="muted">${x.ejercicios.length} ejercicios · ${x.ejercicios.reduce((a, e) => a + e.series.length, 0)} series</span></span>
-      <span class="tags">${gs.map(g => `<span class="tag" style="--c:${COLORES[g] || "var(--dim)"}">${C.esc(g)}</span>`).join("")}</span></button>`;
+      <span class="tags">${gs.map(tag).join("")}</span></button>`;
   };
   return `<div class="card accent"><p class="card-title">Copiar una sesión</p>
     <p class="muted" style="margin:0">De cada ejercicio se copia tu mejor sesión: mismas series, con sus pesos y repeticiones en gris como marca a batir.</p>
@@ -296,9 +305,9 @@ function vPicker() {
     <div class="lista">${lista.map(e => E.confirmEj === e.id ? `
       <div class="item confirm"><span>¿Eliminar «${C.esc(e.nombre)}» del catálogo? Tus sesiones antiguas lo conservan.</span>
         <span class="btn-row"><button class="btn danger sm" data-e="borrar-ej" data-id="${e.id}">Eliminar</button><button class="btn sm" data-e="no-borrar-ej">Cancelar</button></span></div>` : `
-      <div class="item">
+      <div class="item franja" style="${franja(e.grupos)}">
         <button class="item-main pick" data-e="elegir" data-id="${e.id}"><b>${C.esc(e.nombre)}</b>
-          <span class="tags">${Object.keys(e.grupos || {}).map(g => `<span class="tag" style="--c:${COLORES[g] || "var(--dim)"}">${C.esc(g)}</span>`).join("")}${e.unilateral ? `<span class="tag line">×2</span>` : ""}</span></button>
+          <span class="tags">${Object.keys(e.grupos || {}).map(tag).join("")}${e.unilateral ? `<span class="tag line">×2</span>` : ""}</span></button>
         <button class="icon-btn sm" data-e="editar-ej" data-id="${e.id}" aria-label="Editar ${C.esc(e.nombre)}">${C.icon("lapiz", 16)}</button>
         <button class="icon-btn sm danger" data-e="pedir-borrar-ej" data-id="${e.id}" aria-label="Eliminar ${C.esc(e.nombre)}">${C.icon("papelera", 16)}</button>
       </div>`).join("") || `<p class="muted">Sin coincidencias.</p>`}</div>
@@ -377,7 +386,7 @@ function vRecords() {
   if (!grupos.length) return "";
   return `<div class="card"><p class="card-title">Récords por ejercicio</p>
     ${grupos.map(g => `<div class="sub-label" style="--c:${COLORES[g] || "var(--dim)"}"><i class="dot"></i>${C.esc(g)}</div>
-      ${porG[g].sort((a, b) => b.e1 - a.e1).map(r => `<button class="item record ${r.id === E.progEj ? "on" : ""}" data-e="ver-ej" data-id="${r.id}">
+      ${porG[g].sort((a, b) => b.e1 - a.e1).map(r => `<button class="item record franja ${r.id === E.progEj ? "on" : ""}" style="--franja:${colorDe(g)}" data-e="ver-ej" data-id="${r.id}">
         <span class="item-main"><b>${C.esc(r.nombre)}</b><span class="muted">${fmtNum(r.peso)}×${r.reps} · ${C.esc(C.fecha(r.fecha))}</span></span>
         <span class="mono acc">${C.nf(Math.round(r.e1))}<small> kg</small></span></button>`).join("")}`).join("")}
     <p class="muted" style="margin:0">1RM estimado de la mejor serie de cada ejercicio. Pulsa uno para ver su evolución arriba.</p></div>`;
@@ -445,7 +454,7 @@ function vVolumen() {
       const sets = row[g] || 0, lm = rangos[g], st = estadoVolumen(sets, lm);
       const escala = Math.max(lm ? lm.max * 1.3 : 20, sets) * 1.05, pc = v => Math.min(100, v / escala * 100);
       return `<div class="vol">
-        <div class="vol-top"><span>${C.esc(g)}</span><span style="color:${st.col}"><b>${C.nf(sets, sets % 1 ? 1 : 0)}</b> ${lm ? `<span class="muted">/ ${lm.min}–${lm.max}</span>` : ""}</span></div>
+        <div class="vol-top"><span class="g-nombre"><i class="dot" style="background:${colorDe(g)}"></i>${C.esc(g)}</span><span style="color:${st.col}"><b>${C.nf(sets, sets % 1 ? 1 : 0)}</b> ${lm ? `<span class="muted">/ ${lm.min}–${lm.max}</span>` : ""}</span></div>
         <div class="vol-bar">${lm ? `<i class="vol-rango" style="left:${pc(lm.min)}%;width:${pc(lm.max) - pc(lm.min)}%"></i>` : ""}<i class="vol-fill" style="width:${pc(sets)}%;background:${st.col}"></i></div>
         <div class="vol-txt" style="color:${st.col}">${st.marca ? st.marca + " " : ""}${st.txt}</div></div>`;
     }).join("")}
@@ -496,7 +505,7 @@ function vHistorial() {
                 <span class="muted">${minutos(s)} min · ${s.ejercicios.length} ej.</span></button>
               ${ab ? `<div class="hist-body">
                 <div class="acc">${C.nf(Math.round(vol))} kg de volumen</div>
-                ${s.ejercicios.map(e => `<div><b>${C.esc(e.nombre)}</b> <span class="muted">${e.series.map(x => completa(x) ? `${fmtNum(x.peso)}×${x.reps}` : "—").join(", ")}</span></div>`).join("")}
+                ${s.ejercicios.map(e => `<div class="hist-ej franja" style="${franja(e.grupos)}"><b>${C.esc(e.nombre)}</b> <span class="muted">${e.series.map(x => completa(x) ? `${fmtNum(x.peso)}×${x.reps}` : "—").join(", ")}</span></div>`).join("")}
                 <div class="btn-row">
                   <button class="btn sm" data-e="ir-fecha" data-f="${s.fecha}">Abrir en Registrar</button>
                   ${E.confirmBorrar === s.fecha
