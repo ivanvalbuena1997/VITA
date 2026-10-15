@@ -1,0 +1,141 @@
+/* V.I.T.A. — estilos. Tema HUD oscuro por defecto; claro con data-theme="claro". */
+
+@font-face { font-family: "Orbitron"; src: url("../fonts/orbitron-latin-500-normal.woff2") format("woff2"); font-weight: 500; font-display: swap; }
+@font-face { font-family: "Orbitron"; src: url("../fonts/orbitron-latin-700-normal.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+@font-face { font-family: "Rajdhani"; src: url("../fonts/rajdhani-latin-500-normal.woff2") format("woff2"); font-weight: 500; font-display: swap; }
+@font-face { font-family: "Rajdhani"; src: url("../fonts/rajdhani-latin-600-normal.woff2") format("woff2"); font-weight: 600; font-display: swap; }
+@font-face { font-family: "Rajdhani"; src: url("../fonts/rajdhani-latin-700-normal.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+
+:root {
+  --bg: #05080C; --surf: #0B141B; --surf2: #0F1C25; --line: #1C2E38;
+  --text: #E6F7FB; --dim: #9DBDC7; --mute: #6F8F9B;
+  --acc: #3FE0FF; --acc-soft: rgba(63, 224, 255, 0.13); --on-acc: #03161C;
+  --glow: 0 0 14px rgba(63, 224, 255, 0.55); --glow-box: 0 0 18px rgba(63, 224, 255, 0.18);
+  --ok: #6EE7A8; --warn: #FFB547; --bad: #FF6B6B;
+  --prot: #FF7A90; --hid: #FFC94D; --gra: #B48CFF; --fib: #6EE7A8;
+  --radius: 16px;
+  color-scheme: dark;
+}
+:root[data-theme="claro"] {
+  --bg: #EEF3F6; --surf: #FFFFFF; --surf2: #F4F8FA; --line: #CFDCE3;
+  --text: #0B1A22; --dim: #3E5966; --mute: #5A727E;
+  --acc: #007A99; --acc-soft: rgba(0, 122, 153, 0.10); --on-acc: #FFFFFF;
+  --glow: none; --glow-box: none;
+  --ok: #127A4A; --warn: #A15C00; --bad: #C0392B;
+  --prot: #C93652; --hid: #8F6300; --gra: #6A3FC8; --fib: #127A4A;
+  color-scheme: light;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: "Rajdhani", system-ui, sans-serif; font-size: 16px; line-height: 1.35;
+  -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent;
+  min-height: 100vh;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+.hide { display: none !important; }
+.mono { font-family: "Orbitron", sans-serif; }
+
+/* ---------- estructura ---------- */
+.app { display: flex; flex-direction: column; min-height: 100vh; }
+.top {
+  position: sticky; top: 0; z-index: 20; background: var(--bg);
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: calc(14px + env(safe-area-inset-top)) 16px 12px; border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-name { font-family: "Orbitron", sans-serif; font-weight: 700; font-size: 18px; letter-spacing: 0.16em; }
+.top-actions { display: flex; align-items: center; gap: 8px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px;
+  border: 1px solid var(--line); border-radius: 999px; font-size: 13px; font-weight: 600; color: var(--dim);
+}
+.icon-btn {
+  width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: 1px solid var(--line); border-radius: 12px; color: var(--dim);
+}
+main { flex: 1; width: 100%; max-width: 760px; margin: 0 auto; padding: 14px 16px 104px; display: flex; flex-direction: column; gap: 12px; }
+
+.tabs {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+  background: var(--surf); border-top: 1px solid var(--line); padding: 0 4px env(safe-area-inset-bottom);
+}
+.tab {
+  height: 64px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  background: transparent; border: none; border-top: 2px solid transparent; color: var(--mute);
+  font-size: 12px; font-weight: 700; letter-spacing: 0.06em;
+}
+.tab[aria-current="page"] { color: var(--acc); border-top-color: var(--acc); }
+
+/* Escritorio: menú lateral */
+@media (min-width: 900px) {
+  .app { flex-direction: row; flex-wrap: wrap; }
+  .top { width: 100%; }
+  .tabs {
+    position: sticky; top: 71px; align-self: flex-start; height: calc(100vh - 71px);
+    width: 200px; display: flex; flex-direction: column; gap: 4px; padding: 16px 10px;
+    border-top: none; border-right: 1px solid var(--line);
+  }
+  .tab { height: 48px; flex-direction: row; justify-content: flex-start; gap: 12px; padding: 0 14px;
+    border-top: none; border-left: 2px solid transparent; border-radius: 0 10px 10px 0; font-size: 15px; }
+  .tab[aria-current="page"] { border-left-color: var(--acc); background: var(--acc-soft); }
+  main { flex: 999 1 560px; min-width: 0; padding-bottom: 40px; }
+}
+
+/* ---------- piezas ---------- */
+.label { font-size: 13px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim); }
+.card { background: var(--surf); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.card.accent { border-color: var(--acc); box-shadow: var(--glow-box); }
+.card-title { font-size: 14px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); margin: 0; }
+.big { font-family: "Orbitron", sans-serif; font-weight: 700; font-size: 34px; color: var(--acc); text-shadow: var(--glow); line-height: 1.1; }
+.muted { color: var(--mute); font-size: 14px; }
+.dim { color: var(--dim); }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { background: var(--surf2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.stat b { font-family: "Orbitron", sans-serif; font-size: 18px; }
+.stat span { font-size: 13px; color: var(--mute); }
+.row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.row:first-of-type { border-top: none; }
+.row > span:last-child { color: var(--dim); text-align: right; }
+
+.btn {
+  min-height: 44px; padding: 0 16px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  background: transparent; border: 1px solid var(--line); border-radius: 12px; font-weight: 700; font-size: 15px; color: var(--text);
+}
+.btn.primary { background: var(--acc); border-color: var(--acc); color: var(--on-acc); }
+.btn.danger { border-color: var(--bad); color: var(--bad); }
+.btn[disabled] { opacity: 0.5; cursor: default; }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-row .btn { flex: 1 1 140px; }
+
+.campo { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 700; color: var(--dim); }
+.campo input, .campo select { min-height: 44px; padding: 0 10px; background: var(--surf2); border: 1px solid var(--line); border-radius: 10px; font-size: 16px; font-weight: 600; color: var(--text); width: 100%; }
+.seg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.seg button { min-height: 44px; border: 1px solid var(--line); border-radius: 10px; background: transparent; font-weight: 700; }
+.seg button[aria-pressed="true"] { border-color: var(--acc); background: var(--acc-soft); }
+
+.notice { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--warn); border-radius: 14px; font-size: 15px; }
+.notice.ok { border-color: var(--line); border-style: dashed; color: var(--dim); }
+.list { margin: 0; padding-left: 18px; color: var(--dim); font-size: 15px; display: flex; flex-direction: column; gap: 4px; }
+
+.toast {
+  position: fixed; left: 50%; bottom: 88px; transform: translateX(-50%); z-index: 50;
+  background: var(--surf); border: 1px solid var(--acc); border-radius: 12px; padding: 10px 16px;
+  font-weight: 600; box-shadow: var(--glow-box); max-width: calc(100vw - 32px);
+}
+
+/* ---------- pantalla de entrada ---------- */
+.login { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; padding: 24px; text-align: center; }
+.login .brand-name { font-size: 34px; letter-spacing: 0.18em; text-shadow: var(--glow); }
+.login p { margin: 0; color: var(--dim); max-width: 340px; }
+.err { color: var(--bad); font-size: 14px; max-width: 360px; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .pulse path { stroke-dasharray: 400; stroke-dashoffset: 400; animation: trazo 1.6s ease-out forwards; }
+  @keyframes trazo { to { stroke-dashoffset: 0; } }
+}

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <clipPath id="c"><circle cx="256" cy="256" r="150"/></clipPath>
+    <filter id="g" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#05080C"/>
+  <circle cx="256" cy="256" r="150" fill="#0B141B"/>
+  <g clip-path="url(#c)" stroke="#3FE0FF" stroke-width="2" opacity="0.2">
+    <path d="M106 176H406M106 216H406M106 256H406M106 296H406M106 336H406M176 106V406M216 106V406M256 106V406M296 106V406M336 106V406"/>
+  </g>
+  <g clip-path="url(#c)">
+    <path d="M90 262H190L206 232L222 262L256 346L308 162L326 262H422" fill="none" stroke="#3FE0FF" stroke-width="20" stroke-linejoin="miter" stroke-linecap="square" filter="url(#g)"/>
+  </g>
+  <circle cx="256" cy="256" r="170" fill="none" stroke="#3FE0FF" stroke-width="5" opacity="0.55"/>
+  <path d="M256 70V92M256 420V442M70 256H92M420 256H442" stroke="#3FE0FF" stroke-width="7"/>
+</svg>
