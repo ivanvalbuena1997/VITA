@@ -397,14 +397,15 @@ export function seriesPorSemana(desde) {
   });
   return out;
 }
+/* Nota de un grupo: 100 dentro del rango; por debajo, proporcional a lo hecho
+   (6 de 12 = 50); por encima, se resta lo que te pasas (24 sobre 20 = 80),
+   sin bajar de 50. */
 function estadoVolumen(sets, lm) {
   if (!lm) return { txt: sets ? "sin rango definido" : "sin trabajar", col: "var(--dim)", nota: null };
-  if (!sets) return { txt: "sin trabajar", col: "var(--mute)", nota: 0 };
-  if (sets < lm.mev) return { txt: "por debajo del mínimo", col: "var(--bad)", marca: "▼", nota: 50 };
-  if (sets < lm.min) return { txt: "efectivo", col: "var(--dim)", nota: 80 };
-  if (sets <= lm.max) return { txt: "en rango óptimo", col: "var(--acc)", marca: "✓", nota: 100 };
-  if (sets <= lm.mrv) return { txt: "alto", col: "var(--warn)", marca: "▲", nota: 80 };
-  return { txt: "por encima del máximo", col: "var(--bad)", marca: "▲▲", nota: 50 };
+  if (!sets) return { txt: "sin trabajar", col: "var(--bad)", marca: "▼", nota: 0 };
+  if (sets < lm.min) return { txt: `por debajo del rango (faltan ${C.nf(lm.min - sets, (lm.min - sets) % 1 ? 1 : 0)})`, col: "var(--warn)", marca: "▼", nota: Math.round(sets / lm.min * 100) };
+  if (sets <= lm.max) return { txt: "en rango", col: "var(--acc)", marca: "✓", nota: 100 };
+  return { txt: `por encima del rango (+${C.nf(sets - lm.max, (sets - lm.max) % 1 ? 1 : 0)})`, col: "var(--warn)", marca: "▲", nota: Math.max(50, Math.round(100 - (sets - lm.max) / lm.max * 100)) };
 }
 function notaSemana(row) {
   const rangos = C.S.ajustes.entreno.rangos || {};
@@ -429,7 +430,7 @@ function vVolumen() {
   const rangos = C.S.ajustes.entreno.rangos || {};
   const nota = notaSemana(row);
   const tier = nota === null ? null : nota >= 85 ? ["Semana muy completa", "var(--acc)"] : nota >= 70 ? ["Semana correcta", "var(--text)"] : nota >= 50 ? ["Mejorable", "var(--warn)"] : ["Semana floja", "var(--bad)"];
-  const filas = GRUPOS.filter(g => (row[g] || 0) > 0 || (rangos[g] && rangos[g].mev > 0));
+  const filas = GRUPOS.filter(g => (row[g] || 0) > 0 || (rangos[g] && !OPCIONALES.has(g)));
   return selectorRango("vol", E.volRango) + `
   <div class="card"><p class="card-title">Series semanales por grupo</p>${grafBarras(semanas, porSem, activos)}</div>
   <div class="card">
@@ -442,13 +443,13 @@ function vVolumen() {
     ${tier ? `<div class="nota"><span class="mono" style="color:${tier[1]}">${nota}<small>/100</small></span><span style="color:${tier[1]}">${tier[0]}</span></div>` : ""}
     ${filas.map(g => {
       const sets = row[g] || 0, lm = rangos[g], st = estadoVolumen(sets, lm);
-      const escala = Math.max(lm ? lm.mrv : 20, sets) * 1.05, pc = v => Math.min(100, v / escala * 100);
+      const escala = Math.max(lm ? lm.max * 1.3 : 20, sets) * 1.05, pc = v => Math.min(100, v / escala * 100);
       return `<div class="vol">
         <div class="vol-top"><span>${C.esc(g)}</span><span style="color:${st.col}"><b>${C.nf(sets, sets % 1 ? 1 : 0)}</b> ${lm ? `<span class="muted">/ ${lm.min}–${lm.max}</span>` : ""}</span></div>
         <div class="vol-bar">${lm ? `<i class="vol-rango" style="left:${pc(lm.min)}%;width:${pc(lm.max) - pc(lm.min)}%"></i>` : ""}<i class="vol-fill" style="width:${pc(sets)}%;background:${st.col}"></i></div>
         <div class="vol-txt" style="color:${st.col}">${st.marca ? st.marca + " " : ""}${st.txt}</div></div>`;
     }).join("")}
-    <p class="muted" style="margin:0">La franja clara es el rango productivo. Los rangos se editan en Ajustes; los grupos sin rango no cuentan en la nota. Hombro anterior, core y antebrazo solo cuentan si los entrenas.</p>
+    <p class="muted" style="margin:0">La franja clara es tu rango (desde–hasta). Dentro del rango, 100; por debajo, proporcional a las series hechas; por encima, se resta lo que te pasas (mínimo 50). Los grupos sin rango no cuentan; hombro anterior, core y antebrazo solo cuentan si los entrenas. Los rangos se editan en Ajustes.</p>
   </div>`;
 }
 function grafBarras(semanas, porSem, activos) {
@@ -523,26 +524,29 @@ export function vAjustes() {
     <div class="btn-row"><button class="btn sm" type="button" data-e="probar-sonido">Probar sonido</button></div>
     <label class="campo">Criterios de registro (uno por línea)<textarea name="criterios" rows="5">${C.esc((a.criterios || []).join("\n"))}</textarea></label>
     <p class="card-title" style="margin-top:6px">Rangos semanales de series</p>
-    <p class="muted" style="margin:0">MEV mínimo efectivo · rango productivo (desde–hasta) · MRV máximo recuperable. Deja un grupo en blanco para no darle rango.</p>
+    <p class="muted" style="margin:0">Series efectivas por semana. Deja un grupo en blanco para no darle rango (no contará en la nota).</p>
     <div class="rangos">
-      <span></span><span class="muted">MEV</span><span class="muted">Desde</span><span class="muted">Hasta</span><span class="muted">MRV</span>
-      ${GRUPOS.map(g => `<span>${C.esc(g)}</span>${["mev", "min", "max", "mrv"].map(k => `<input inputmode="numeric" name="r|${g}|${k}" value="${r[g] ? r[g][k] : ""}" aria-label="${C.esc(g)} ${k}">`).join("")}`).join("")}
+      <span></span><span class="muted">Desde</span><span class="muted">Hasta</span>
+      ${GRUPOS.map(g => `<span>${C.esc(g)}</span>${[["min", "desde"], ["max", "hasta"]].map(([k, t]) => `<input inputmode="decimal" name="r|${g}|${k}" value="${r[g] ? fmtNum(r[g][k]) : ""}" aria-label="${C.esc(g)} ${t}">`).join("")}`).join("")}
     </div>
     <div class="btn-row"><button class="btn primary" type="submit">Guardar entreno</button></div>
   </form>`;
 }
 function guardarAjustesEntreno(form) {
   const f = new FormData(form), a = C.S.ajustes.entreno;
+  const r = {}, malos = [];
+  GRUPOS.forEach(g => {
+    const [min, max] = ["min", "max"].map(k => num(f.get(`r|${g}|${k}`)));
+    if (min === null && max === null) { r[g] = null; return; }
+    if (min === null || max === null || min > max || max === 0) { malos.push(g); return; }
+    r[g] = { min, max };
+  });
+  if (malos.length) { C.toast(`Revisa el rango de ${malos.join(", ")}: rellena desde y hasta, con desde ≤ hasta.`, 6000); return; }
+  a.rangos = r;
   a.descansoMin = num(f.get("descansoMin")) ?? 2;
   a.segundosSerie = num(f.get("segundosSerie")) ?? 60;
   a.sonido = !!f.get("sonido");
   a.criterios = String(f.get("criterios") || "").split("\n").map(x => x.trim()).filter(Boolean);
-  const r = {};
-  GRUPOS.forEach(g => {
-    const v = ["mev", "min", "max", "mrv"].map(k => num(f.get(`r|${g}|${k}`)));
-    r[g] = v.every(x => x !== null) ? { mev: v[0], min: v[1], max: v[2], mrv: v[3] } : null;
-  });
-  a.rangos = r;
   C.DB.guardarAjustes(C.S.user.uid, C.S.ajustes).catch(err => C.toast("No se pudo guardar: " + C.mensajeError(err), 5000));
   C.toast("Ajustes de entreno guardados."); C.render();
 }

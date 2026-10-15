@@ -373,6 +373,12 @@ async function arrancar() {
       S.pendiente[nombre] = pendiente;
       if (nombre === "ajustes") {
         S.ajustes = valor || null;
+        // 0.2.1: los rangos pasan a ser solo desde–hasta; se limpian los de antes
+        const rg = S.ajustes && S.ajustes.entreno && S.ajustes.entreno.rangos;
+        if (rg && Object.values(rg).some(x => x && ("mev" in x || "mrv" in x))) {
+          Object.keys(rg).forEach(g => { if (rg[g]) rg[g] = { min: rg[g].min, max: rg[g].max }; });
+          DB.guardarAjustes(user.uid, S.ajustes).catch(() => {});
+        }
         if (!valor && !recibidos.has("ajustes")) {      // primera vez: ajustes iniciales
           S.ajustes = ajustesPorDefecto(); S.ajustes.app.tema = temaActual();
           DB.guardarAjustes(user.uid, S.ajustes).catch(e => toast(mensajeError(e), 6000));

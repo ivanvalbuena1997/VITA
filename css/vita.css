@@ -254,7 +254,7 @@ main { flex: 1; width: 100%; max-width: 760px; margin: 0 auto; padding: 14px 16p
 .hist-body { display: flex; flex-direction: column; gap: 6px; padding: 0 12px 12px; font-size: 15px; }
 
 /* ajustes de entreno */
-.rangos { display: grid; grid-template-columns: minmax(0, 1.7fr) repeat(4, minmax(0, 1fr)); gap: 4px 6px; align-items: center; font-size: 14px; font-weight: 600; }
+.rangos { display: grid; grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr)); max-width: 420px; gap: 4px 6px; align-items: center; font-size: 14px; font-weight: 600; }
 .rangos input { min-height: 38px; width: 100%; padding: 0 4px; text-align: center; background: var(--surf2); border: 1px solid var(--line); border-radius: 8px; font-size: 15px; }
 .rangos > span.muted { text-align: center; font-size: 12px; }
 

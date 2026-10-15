@@ -3,12 +3,13 @@
    Unidades: peso en kg, altura en cm, energía en kcal, gramos en g o ml según
    el alimento, fechas AAAA-MM-DD en hora local. La semana empieza en lunes. */
 
-export const APP_VERSION = "0.2.0";
+export const APP_VERSION = "0.2.1";
 export const SCHEMA_VERSION = 1;
 
-/* Grupos musculares. Los rangos semanales (series) de los grupos que ya
-   existían vienen de GYM-TRACKER (marco MEV/MAV/MRV, orientativo). Los grupos
-   nuevos quedan sin rango (null) hasta que Iván los fije en Ajustes. */
+/* Grupos musculares. Cada rango semanal es solo «desde–hasta» (series), fijado
+   por Iván según su experiencia. Los valores de partida de los grupos que ya
+   existían son los de GYM-TRACKER; los grupos nuevos quedan sin rango (null)
+   hasta que los rellene en Ajustes. */
 export const GRUPOS = [
   "Pecho", "Dorsal", "Espalda media",
   "Hombro anterior", "Hombro lateral", "Hombro posterior",
@@ -17,19 +18,19 @@ export const GRUPOS = [
 ];
 
 export const RANGOS_POR_DEFECTO = {
-  "Pecho":          { mev: 8, min: 12, max: 20, mrv: 22 },
+  "Pecho":          { min: 12, max: 20 },
   "Dorsal":         null,
   "Espalda media":  null,
   "Hombro anterior": null,
   "Hombro lateral": null,
   "Hombro posterior": null,
-  "Bíceps":         { mev: 8, min: 14, max: 20, mrv: 26 },
-  "Tríceps":        { mev: 6, min: 10, max: 14, mrv: 18 },
-  "Antebrazo":      { mev: 0, min: 8, max: 12, mrv: 16 },
-  "Cuádriceps":     { mev: 8, min: 12, max: 18, mrv: 20 },
-  "Femoral/Glúteo": { mev: 6, min: 10, max: 16, mrv: 20 },
-  "Gemelos":        { mev: 8, min: 12, max: 16, mrv: 20 },
-  "Core":           { mev: 0, min: 8, max: 16, mrv: 25 }
+  "Bíceps":         { min: 14, max: 20 },
+  "Tríceps":        { min: 10, max: 14 },
+  "Antebrazo":      { min: 8, max: 12 },
+  "Cuádriceps":     { min: 12, max: 18 },
+  "Femoral/Glúteo": { min: 10, max: 16 },
+  "Gemelos":        { min: 12, max: 16 },
+  "Core":           { min: 8, max: 16 }
 };
 
 /* Reparto de grupos para los ejercicios que cambian con los grupos nuevos.
