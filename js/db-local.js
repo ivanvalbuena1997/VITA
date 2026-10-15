@@ -26,3 +26,10 @@ export function sustituirTodo(uid, datos) {
   setTimeout(emitir, 0);
   return { operaciones: COLECCIONES.reduce((a, c) => a + mem[c].size, 2), confirmado: Promise.resolve() };
 }
+
+export async function guardarDoc(uid, col, id, datos) {
+  if (col === "ajustes") mem.ajustes = datos; else if (col === "compra") mem.compra = datos; else mem[col].set(String(id), JSON.parse(JSON.stringify(datos)));
+  setTimeout(emitir, 0);
+}
+export async function borrarDoc(uid, col, id) { mem[col].delete(String(id)); setTimeout(emitir, 0); }
+export async function borrarVarios(uid, col, ids) { ids.forEach(id => mem[col].delete(String(id))); setTimeout(emitir, 0); }

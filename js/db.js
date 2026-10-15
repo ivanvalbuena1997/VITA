@@ -98,3 +98,17 @@ export function sustituirTodo(uid, datos, existentes) {
   }
   return { operaciones: ops.length, confirmado: Promise.all(commits) };
 }
+
+/* ---------- escrituras sueltas ---------- */
+const ref = (uid, col, id) => F.fs.doc(F.db, "users", uid, col, String(id));
+export const guardarDoc = (uid, col, id, datos) => F.fs.setDoc(ref(uid, col, id), datos);
+export const borrarDoc = (uid, col, id) => F.fs.deleteDoc(ref(uid, col, id));
+export function borrarVarios(uid, col, ids) {
+  const commits = [];
+  for (let i = 0; i < ids.length; i += 400) {
+    const b = F.fs.writeBatch(F.db);
+    ids.slice(i, i + 400).forEach(id => b.delete(ref(uid, col, id)));
+    commits.push(b.commit());
+  }
+  return Promise.all(commits);
+}

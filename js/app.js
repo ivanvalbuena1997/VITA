@@ -1,11 +1,12 @@
-/* V.I.T.A. 0.1 — base de la app: entrada con Google, sincronización,
+/* V.I.T.A. — base de la app: entrada con Google, sincronización,
    pestañas, tema, importación de las copias antiguas y copia de seguridad.
-   Las pantallas de Entreno, Comida y Progreso se construyen en 0.2–0.5. */
+   Entreno vive en entreno.js (0.2). Comida y Progreso llegan en 0.3–0.5. */
 
 import { APP_VERSION, ajustesPorDefecto, hoyISO, edadEn } from "./model.js";
 import { importarCopias, volumenSesion, kcalDia } from "./import.js";
 import { crearCopia, esCopiaVita, descargar } from "./backup.js";
 import { icon, logo } from "./icons.js";
+import * as EN from "./entreno.js";
 
 /* Modo local (solo en localhost con ?local): datos en memoria, sin Firebase.
    Sirve para probar la interfaz; nunca se usa en la app publicada. */
@@ -42,14 +43,17 @@ function aplicarTema() {
 }
 function cambiarTema(t) {
   if (!S.ajustes) return;
-  S.ajustes.app.tema = t; aplicarTema(); render();
+  S.ajustes.app.tema = t; aplicarTema(); render(true);
   DB.guardarAjustes(S.user.uid, S.ajustes).catch(err => toast("No se pudo guardar el tema: " + err.message));
 }
 
 /* ---------- avisos breves ---------- */
 let toastT = null;
-function toast(msg, ms = 2600) {
-  $("toast").innerHTML = `<div class="toast" role="status">${esc(msg)}</div>`;
+function toast(msg, ms = 2600, tipo = "") {
+  if (!$("toast")) return;
+  $("toast").innerHTML = tipo === "rec"
+    ? `<div class="toast rec" role="status">${icon("trofeo", 22)}<span>${esc(msg)}</span></div>`
+    : `<div class="toast" role="status">${esc(msg)}</div>`;
   clearTimeout(toastT); toastT = setTimeout(() => { $("toast").innerHTML = ""; }, ms);
 }
 
@@ -113,12 +117,27 @@ function esqueleto() {
     <nav class="tabs" id="tabs" aria-label="Secciones"></nav>
     <main id="main"></main>
   </div>
+  <div id="rest"></div>
   <div id="update"></div>
   <div id="toast"></div>`;
   $("tema").onclick = () => cambiarTema(temaActual() === "claro" ? "oscuro" : "claro");
 }
 
-function render() {
+/* Mientras escribes en un campo de la pantalla, los repintados que llegan de
+   la sincronización esperan a que salgas del campo, para no perder el foco. */
+let renderPendiente = false;
+function escribiendo() {
+  const a = document.activeElement;
+  return !!(a && a.closest && a.closest("#main") && (a.matches("textarea, select") ||
+    (a.matches("input") && !["checkbox", "radio", "date", "file", "submit", "button"].includes(a.type))));
+}
+document.addEventListener("focusout", () => setTimeout(() => {
+  if (renderPendiente && !escribiendo()) render(true);
+}, 0));
+
+function render(forzar = false) {
+  if (!forzar && S.cargado && escribiendo()) { renderPendiente = true; return; }
+  renderPendiente = false;
   if (!$("main")) esqueleto();
   aplicarTema();
   const sy = estadoSync();
@@ -162,7 +181,6 @@ function vHoy() {
   </div>
   <p class="muted" style="margin:0">Peso para los cálculos: ${pc.valor ? nf(pc.valor, 1) + " kg (" + esc(pc.fuente) + ")" : "falta el peso de referencia"}.</p></div>`);
   out.push(`<div class="card"><p class="card-title">Lo que viene</p><ul class="list">
-    <li>0.2 · Entreno: registro, temporizador, récords y volumen por grupo.</li>
     <li>0.3 · Comida: alimentos, platos, diario, menús y compra.</li>
     <li>0.4 · Actividad y cuerpo: pasos, cardio, pesajes y gasto.</li>
     <li>0.5 · Hoy con balance y macros, resumen semanal y exportación para el entrenador IA.</li></ul></div>`);
@@ -172,15 +190,7 @@ function vHoy() {
 const enConstruccion = (titulo, version, lineas) => `<div class="label">${titulo}</div>
   <div class="card"><p class="card-title">Llega en la ${version}</p><ul class="list">${lineas.map(l => `<li>${l}</li>`).join("")}</ul></div>`;
 
-function vEntreno() {
-  const series = S.sesiones.reduce((a, s) => a + s.ejercicios.reduce((b, e) => b + e.series.filter(x => x.peso != null && x.reps != null).length, 0), 0);
-  return enConstruccion("Entreno", "0.2", [
-    `${S.sesiones.length} sesiones, ${nf(series)} series y ${S.ejercicios.length} ejercicios ya sincronizados.`,
-    "Registro de series con guardado instantáneo y copia de tu mejor sesión.",
-    "Aviso de récord al terminar la serie, visible en la propia serie.",
-    "Temporizador de descanso con sonido y pantalla encendida.",
-    "Volumen semanal con los grupos nuevos y rangos editables."]);
-}
+const vEntreno = () => EN.vista();
 function vComida() {
   const platos = S.alimentos.filter(a => a.tipo === "plato").length;
   return enConstruccion("Comida", "0.3", [
@@ -191,7 +201,6 @@ function vComida() {
 }
 function vProgreso() {
   return enConstruccion("Progreso", "0.4 y 0.5", [
-    "Progresión y récords por ejercicio.",
     "Resumen semanal: volumen, ingesta, gasto, balance, proteína, pasos y peso.",
     "Gasto con digestión incluida y calibración con tu peso real.",
     "Exportación de la semana para el entrenador IA."]);
@@ -227,6 +236,7 @@ function vAjustes() {
     <div class="row"><span>Objetivo diario</span><span>${nf(a.objetivo.kcal)} kcal</span></div>
     <div class="btn-row"><button class="btn primary" type="submit">Guardar datos</button></div>
   </form>
+  ${EN.vAjustes()}
   <div class="card"><p class="card-title">Datos y copias</p>
     <div class="row"><span>Última copia descargada</span><span>${a.app.ultimaCopia ? esc(fecha(a.app.ultimaCopia)) : "nunca"}</span></div>
     <div class="btn-row">
@@ -291,7 +301,7 @@ async function importar() {
   ["ejercicios", "alimentos", "menus"].forEach(c => existentes[c] = S[c].map(x => x.id));
   ["sesiones", "dias", "diario"].forEach(c => existentes[c] = S[c].map(x => x.fecha));
   const { operaciones, confirmado } = DB.sustituirTodo(S.user.uid, d, existentes);
-  S.importacion = null; render();
+  S.importacion = null; render(true);
   toast(`Importando (${operaciones} registros)…`, 4000);
   const r = await Promise.race([confirmado.then(() => "ok"), new Promise(res => setTimeout(() => res("pendiente"), 10000))])
     .catch(e => { toast("Error al importar: " + mensajeError(e), 6000); return "error"; });
@@ -303,12 +313,13 @@ function descargarCopia() {
   descargar(crearCopia(S));
   S.ajustes.app.ultimaCopia = hoyISO();
   DB.guardarAjustes(S.user.uid, S.ajustes).catch(() => {});
-  render(); toast("Copia descargada. Guárdala en Drive o en el ordenador.");
+  render(true); toast("Copia descargada. Guárdala en Drive o en el ordenador.");
 }
 
 document.addEventListener("click", e => {
   const t = e.target.closest("[data-tab]");
-  if (t) { S.tab = t.dataset.tab; history.replaceState(null, "", "#" + S.tab); render(); window.scrollTo(0, 0); return; }
+  if (t) { EN.guardarYa(); S.tab = t.dataset.tab; history.replaceState(null, "", "#" + S.tab); render(true); window.scrollTo(0, 0); return; }
+  if (S.cargado && EN.click(e)) return;
   const tm = e.target.closest("[data-tema]");
   if (tm) { cambiarTema(tm.dataset.tema); return; }
   const b = e.target.closest("[data-act]");
@@ -317,13 +328,16 @@ document.addEventListener("click", e => {
   if (act === "salir") DB.salir();
   if (act === "copia") descargarCopia();
   if (act === "importar") importar();
-  if (act === "cancelar-imp") { S.importacion = null; render(); }
+  if (act === "cancelar-imp") { S.importacion = null; render(true); }
 });
+document.addEventListener("input", e => { if (S.cargado) EN.input(e.target); });
 document.addEventListener("change", e => {
+  if (S.cargado && EN.change(e.target)) return;
   if (e.target.id === "archivos" && e.target.files.length)
     leerArchivos(e.target.files).catch(err => toast(err.message, 5000));
 });
 document.addEventListener("submit", e => {
+  if (S.cargado && EN.submit(e.target)) { e.preventDefault(); return; }
   if (e.target.id !== "cuerpo") return;
   e.preventDefault();
   const f = new FormData(e.target), p = S.ajustes.perfil;
@@ -333,7 +347,7 @@ document.addEventListener("submit", e => {
   p.altura = n("altura");
   p.pesoReferencia = n("pesoReferencia");
   DB.guardarAjustes(S.user.uid, S.ajustes).then(() => {}, err => toast("No se pudo guardar: " + mensajeError(err), 5000));
-  render(); toast("Datos guardados.");
+  render(true); toast("Datos guardados.");
 });
 window.addEventListener("online", () => { S.online = true; if (S.user) render(); });
 window.addEventListener("offline", () => { S.online = false; if (S.user) render(); });
@@ -364,6 +378,7 @@ async function arrancar() {
           DB.guardarAjustes(user.uid, S.ajustes).catch(e => toast(mensajeError(e), 6000));
         }
       } else if (nombre === "compra") S.compra = valor || { items: [], marcados: [] };
+      else if (nombre === "sesiones" && EN.editando()) { /* hay una serie sin guardar: llegará en el siguiente aviso */ }
       else S[nombre] = valor;
       recibidos.add(nombre);
       S.cargado = recibidos.size >= 8 && !!S.ajustes;
@@ -390,4 +405,5 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http") && !MOD
   navigator.serviceWorker.addEventListener("controllerchange", () => { if (!recargado) { recargado = true; location.reload(); } });
 }
 
+EN.init({ S, DB, render: () => render(true), toast, esc, nf, fecha, icon, mensajeError });
 arrancar();
