@@ -4,6 +4,7 @@
    y las actualizaciones que llegan de la nube no pisan lo que estás tecleando. */
 
 import { GRUPOS, hoyISO, toISO } from "./model.js";
+import { notaVolumen, OPCIONALES } from "./semana-calc.js";
 
 let C = null;                      // contexto que pasa app.js
 export function init(ctx) { C = ctx; }
@@ -31,8 +32,7 @@ const haceMeses = m => { if (m === null) return null; const d = new Date(); d.se
 const RANGOS = { "1m": 1, "6m": 6, "1y": 12, "all": null };
 const RANGO_TXT = { "1m": "1 mes", "6m": "6 meses", "1y": "1 año", "all": "Todo" };
 const grupoPrincipal = e => Object.keys(e.grupos || {})[0] || "Otros";
-const PRIORITARIOS = new Set(["Pecho", "Dorsal", "Espalda media", "Hombro lateral", "Hombro posterior", "Bíceps", "Tríceps"]);
-const OPCIONALES = new Set(["Core", "Antebrazo", "Hombro anterior"]);   // solo cuentan si se entrenan
+// Prioritarios ×1,5 y opcionales (solo si se entrenan): ver semana-calc.js
 const COLORES = {
   "Pecho": "#FF7A90", "Dorsal": "#4D8BFF", "Espalda media": "#3FE0FF", "Hombro anterior": "#FFB547",
   "Hombro lateral": "#FFD24D", "Hombro posterior": "#FF9F43", "Bíceps": "#B8FF5A", "Tríceps": "#FF6BD6",
@@ -419,18 +419,7 @@ function estadoVolumen(sets, lm) {
   if (sets <= lm.max) return { txt: "en rango", col: "var(--acc)", marca: "✓", nota: 100 };
   return { txt: `por encima del rango (+${C.nf(sets - lm.max, (sets - lm.max) % 1 ? 1 : 0)})`, col: "var(--warn)", marca: "▲", nota: Math.max(50, Math.round(100 - (sets - lm.max) / lm.max * 100)) };
 }
-function notaSemana(row) {
-  const rangos = C.S.ajustes.entreno.rangos || {};
-  let pts = 0, pesos = 0;
-  GRUPOS.forEach(g => {
-    const lm = rangos[g]; if (!lm) return;
-    const sets = row[g] || 0;
-    if (OPCIONALES.has(g) && !sets) return;
-    const p = PRIORITARIOS.has(g) ? 1.5 : 1;
-    pts += estadoVolumen(sets, lm).nota * p; pesos += p;
-  });
-  return pesos ? Math.round(pts / pesos) : null;
-}
+const notaSemana = row => notaVolumen(row, C.S.ajustes.entreno.rangos);
 function vVolumen() {
   const desdeRaw = haceMeses(RANGOS[E.volRango]);
   const porSem = seriesPorSemana(desdeRaw ? lunesDe(desdeRaw) : null);

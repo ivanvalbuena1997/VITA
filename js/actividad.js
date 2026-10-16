@@ -41,6 +41,7 @@ function guardarDia(f, cambio) {
   if (vacio) { C.S.dias = C.S.dias.filter(x => x !== d); C.DB.borrarDoc(C.S.user.uid, "dias", f).catch(fallo); }
   else C.DB.guardarDoc(C.S.user.uid, "dias", f, JSON.parse(JSON.stringify(d))).catch(fallo);
 }
+export function irHoy() { P.sub = "dia"; P.fecha = hoyISO(); P.cardio = null; }
 export function pesoHoy() { return A.pesoEn(C.S.dias, C.S.ajustes.perfil, hoyISO()); }
 
 /* ---------- gráficas SVG ---------- */
@@ -83,10 +84,10 @@ const selector = (id, actual, opciones) => `<div class="seg seg${opciones.length
 
 /* ================= vista ================= */
 export function vista() {
-  const subs = [["dia", "Día"], ["pasos", "Pasos"], ["peso", "Peso"], ["gasto", "Gasto"]];
-  const cuerpo = { dia: vDia, pasos: vPasos, peso: vPeso, gasto: vGasto }[P.sub]();
+  const subs = [["dia", "Día"], ["semana", "Semana"], ["pasos", "Pasos"], ["peso", "Peso"], ["gasto", "Gasto"]];
+  const cuerpo = { dia: vDia, semana: () => C.vSemana(), pasos: vPasos, peso: vPeso, gasto: vGasto }[P.sub]();
   return `<div class="label">Progreso</div>
-  <div class="seg seg4" role="tablist">${subs.map(([k, n]) => `<button data-asub="${k}" aria-pressed="${P.sub === k}">${n}</button>`).join("")}</div>
+  <div class="seg seg5" role="tablist">${subs.map(([k, n]) => `<button data-asub="${k}" aria-pressed="${P.sub === k}">${n}</button>`).join("")}</div>
   ${cuerpo}`;
 }
 

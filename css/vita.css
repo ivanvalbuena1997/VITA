@@ -382,3 +382,12 @@ body.con-hoja { overflow: hidden; }
 .row.total > span:last-child { color: var(--text); }
 .g-obj { stroke: var(--text); stroke-width: 1.5; stroke-dasharray: 6 4; opacity: 0.7; }
 .sub-form { padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surf2); }
+
+/* ---------- hoy y semana ---------- */
+.balance { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: end; gap: 6px; text-align: center; }
+.balance > div { display: flex; flex-direction: column; gap: 2px; }
+.balance .mono { font-size: 22px; }
+.balance .muted { font-size: 12px; }
+.balance-op { font-size: 20px; color: var(--mute); padding-bottom: 2px; }
+.graf.mini { max-width: none; }
+.accent-suave { border-color: color-mix(in srgb, var(--acc) 50%, var(--line)); }

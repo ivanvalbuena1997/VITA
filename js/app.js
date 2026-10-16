@@ -3,12 +3,13 @@
    Entreno vive en entreno.js (0.2). Comida y Progreso llegan en 0.3–0.5. */
 
 import { APP_VERSION, ajustesPorDefecto, hoyISO, edadEn } from "./model.js";
-import { importarCopias, volumenSesion, kcalDia } from "./import.js";
+import { importarCopias } from "./import.js";
 import { crearCopia, esCopiaVita, descargar } from "./backup.js";
 import { icon, logo } from "./icons.js";
 import * as EN from "./entreno.js";
 import * as CO from "./comida.js";
 import * as AC from "./actividad.js";
+import * as RS from "./resumen.js";
 import { pesoEn } from "./actividad-calc.js";
 import { BASE } from "./comida-base.js";
 import { GOOGLE_CLIENT_ID } from "./config.js";
@@ -247,26 +248,9 @@ function vHoy() {
       <div class="btn-row"><button class="btn primary" data-tab="ajustes">Ir a Ajustes</button></div></div>`);
     return out.join("");
   }
-  const al = Object.fromEntries(S.alimentos.map(a => [a.id, a]));
-  const ultSes = S.sesiones.slice().sort((a, b) => a.fecha < b.fecha ? 1 : -1).find(s => s.ejercicios.some(e => e.series.some(x => x.peso != null && x.reps != null)));
-  const ultDia = S.diario.slice().sort((a, b) => a.fecha < b.fecha ? 1 : -1)[0];
-  const ultPasos = S.dias.filter(d => d.pasos).sort((a, b) => a.fecha < b.fecha ? 1 : -1)[0];
-  const ultPeso = S.dias.filter(d => d.peso).sort((a, b) => a.fecha < b.fecha ? 1 : -1)[0];
-  const pc = pesoDeCalculo();
-  out.push(`<div class="card"><p class="card-title">Tus datos sincronizados</p><div class="grid2">
-    <div class="stat"><b>${ultDia ? nf(kcalDia(ultDia, al)) : "—"}</b><span>kcal · ${ultDia ? esc(fecha(ultDia.fecha)) : "sin comidas"}</span></div>
-    <div class="stat"><b>${ultSes ? nf(volumenSesion(ultSes)) : "—"}</b><span>kg de volumen · ${ultSes ? esc(fecha(ultSes.fecha)) : "sin sesiones"}</span></div>
-    <div class="stat"><b>${ultPasos ? nf(ultPasos.pasos) : "—"}</b><span>pasos · ${ultPasos ? esc(fecha(ultPasos.fecha)) : "sin registro"}</span></div>
-    <div class="stat"><b>${ultPeso ? nf(ultPeso.peso, 1) : "—"}</b><span>kg · ${ultPeso ? esc(fecha(ultPeso.fecha)) : "sin pesajes"}</span></div>
-  </div>
-  <p class="muted" style="margin:0">Peso para los cálculos: ${pc.valor ? nf(pc.valor, 1) + " kg (" + esc(pc.fuente) + ")" : "falta el peso de referencia"}.</p></div>`);
-  out.push(`<div class="card"><p class="card-title">Lo que viene</p><ul class="list">
-    <li>0.5 · Hoy con balance y macros, resumen semanal y exportación para el entrenador IA.</li></ul></div>`);
+  out.push(RS.tarjetasHoy());
   return out.join("");
 }
-
-const enConstruccion = (titulo, version, lineas) => `<div class="label">${titulo}</div>
-  <div class="card"><p class="card-title">Llega en la ${version}</p><ul class="list">${lineas.map(l => `<li>${l}</li>`).join("")}</ul></div>`;
 
 const vEntreno = () => EN.vista();
 const vComida = () => CO.vista();
@@ -392,6 +376,7 @@ document.addEventListener("click", e => {
   if (S.cargado && EN.click(e)) return;
   if (S.cargado && CO.click(e)) return;
   if (S.cargado && AC.click(e)) return;
+  if (S.cargado && RS.click(e)) return;
   const tm = e.target.closest("[data-tema]");
   if (tm) { cambiarTema(tm.dataset.tema); return; }
   const b = e.target.closest("[data-act]");
@@ -506,7 +491,9 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http") && !MOD
 }
 
 EN.init({ S, DB, render: () => render(true), toast, esc, nf, fecha, icon, mensajeError });
-AC.init({ S, DB, render: () => render(true), toast, esc, nf, fecha, icon, mensajeError, confirmar: (...a) => CO.confirmar(...a) });
+AC.init({ S, DB, render: () => render(true), toast, esc, nf, fecha, icon, mensajeError, confirmar: (...a) => CO.confirmar(...a), vSemana: () => RS.vSemana() });
+RS.init({ S, render: () => render(true), toast, esc, fecha, icon,
+  irA: tab => { if (tab === "progreso") AC.irHoy(); S.tab = tab; history.replaceState(null, "", "#" + tab); render(true); window.scrollTo(0, 0); } });
 CO.init({ S, DB, render: () => render(true), toast, esc, nf, fecha, icon, mensajeError,
   peso: () => S.ajustes ? pesoDeCalculo().valor : null,
   baseTotal: BASE.length,
