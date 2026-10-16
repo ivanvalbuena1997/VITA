@@ -371,3 +371,5 @@ body.con-hoja { overflow: hidden; }
 .reparto { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
 .reparto .campo { font-size: 11px; }
 .reparto input { text-align: center; padding: 0 4px; }
+/* Las filas de las listas con scroll no se encogen (en pantallas bajas se aplastaban) */
+.lista > *, .items > *, .hoja-cuerpo > *, .series > *, .card > * { flex-shrink: 0; }
