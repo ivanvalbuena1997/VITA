@@ -185,6 +185,36 @@ document.addEventListener("focusout", () => setTimeout(() => {
   if (renderPendiente && !escribiendo()) render(true);
 }, 0));
 
+/* Apartados plegables: cada tarjeta con título se pliega tocando el título.
+   Se recuerda en este dispositivo (el móvil y el ordenador pueden tener
+   distinto gusto). data-plegada="1" = plegada por defecto. */
+let plegado = {};
+try { plegado = JSON.parse(localStorage.getItem("vita:plegado") || "{}") || {}; } catch { plegado = {}; }
+function aplicarPlegables() {
+  document.querySelectorAll("#main .card:not(.accent)").forEach(card => {
+    const t = card.firstElementChild;
+    if (!t || !t.classList.contains("card-title")) return;
+    const clave = S.tab + ":" + (card.dataset.sec || t.textContent.trim());
+    const cerrada = clave in plegado ? plegado[clave] : card.dataset.plegada === "1";
+    card.dataset.clave = clave;
+    card.classList.add("plegable");
+    card.classList.toggle("plegada", cerrada);
+    t.setAttribute("role", "button"); t.tabIndex = 0;
+    t.setAttribute("aria-expanded", String(!cerrada));
+  });
+}
+function alternarPlegable(t) {
+  const card = t.parentElement, cerrada = !card.classList.contains("plegada");
+  card.classList.toggle("plegada", cerrada);
+  t.setAttribute("aria-expanded", String(!cerrada));
+  plegado[card.dataset.clave] = cerrada;
+  try { localStorage.setItem("vita:plegado", JSON.stringify(plegado)); } catch {}
+}
+document.addEventListener("keydown", e => {
+  const t = e.target.closest && e.target.closest(".plegable > .card-title");
+  if (t && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); alternarPlegable(t); }
+});
+
 function render(forzar = false) {
   if (!forzar && S.cargado && escribiendo()) { renderPendiente = true; return; }
   renderPendiente = false;
@@ -196,6 +226,7 @@ function render(forzar = false) {
   $("tabs").innerHTML = TABS.map(t => `<button class="tab" data-tab="${t.id}" ${S.tab === t.id ? 'aria-current="page"' : ""}>${icon(t.id, 24)}<span>${t.label}</span></button>`).join("");
   const vista = { hoy: vHoy, entreno: vEntreno, comida: vComida, progreso: vProgreso, ajustes: vAjustes }[S.tab] || vHoy;
   $("main").innerHTML = S.cargado ? vista() : `<div class="card"><p class="muted" style="margin:0">Cargando tus datos…</p></div>`;
+  aplicarPlegables();
 }
 
 function vHoy() {
@@ -369,6 +400,8 @@ function descargarCopia() {
 document.addEventListener("click", e => {
   const t = e.target.closest("[data-tab]");
   if (t) { EN.guardarYa(); S.tab = t.dataset.tab; history.replaceState(null, "", "#" + S.tab); render(true); window.scrollTo(0, 0); return; }
+  const pl = e.target.closest(".plegable > .card-title");
+  if (pl) { alternarPlegable(pl); return; }
   if (S.cargado && EN.click(e)) return;
   const tm = e.target.closest("[data-tema]");
   if (tm) { cambiarTema(tm.dataset.tema); return; }

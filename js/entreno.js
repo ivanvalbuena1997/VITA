@@ -213,14 +213,16 @@ function vRegistrar() {
       <div class="stat"><b>${ents.length}</b><span>ejercicios</span></div></div>` : ""}
     ${s && s.copiadaDe ? `<p class="muted" style="margin:0">Copiada del ${C.esc(C.fecha(s.copiadaDe))}. Los números en gris son tu mejor marca de cada ejercicio.</p>` : ""}
     ${!ents.length && hayOtras ? `<div class="btn-row"><button class="btn" data-e="copiar-abrir">${C.icon("copiar", 18)}Copiar una sesión anterior</button></div>` : ""}
+    ${ents.length > 1 ? (() => { const todos = ents.every(e => E.plegados.has(e.ejercicioId));
+      return `<div class="btn-row"><button class="btn sm" data-e="plegar-todos">${C.icon(todos ? "abajo" : "arriba", 16)}${todos ? "Desplegar ejercicios" : "Plegar ejercicios"}</button></div>`; })() : ""}
   </div>
   ${E.copiando ? vCopiar() : ""}
   ${ents.map((e, i) => vEjercicio(s, e, i, ents.length, prev)).join("")}
   ${!ents.length && !E.picker && !E.copiando ? `<div class="card vacio">${C.icon("entreno", 32, "var(--mute)")}<p>Sin ejercicios el ${C.esc(C.fecha(E.fecha))}.</p></div>` : ""}
   ${E.picker ? vPicker() : `<button class="btn dashed" data-e="picker">${C.icon("mas", 18)}Añadir ejercicio</button>`}
-  <details class="card criterios"><summary class="card-title">Criterios de registro</summary>
+  <div class="card" data-sec="criterios" data-plegada="1"><p class="card-title">Criterios de registro</p>
     <ul class="list">${(C.S.ajustes.entreno.criterios || []).map(c => `<li>${C.esc(c)}</li>`).join("")}</ul>
-    <p class="muted" style="margin:0">Se editan en Ajustes.</p></details>`;
+    <p class="muted" style="margin:0">Se editan en Ajustes.</p></div>`;
 }
 
 function vEjercicio(s, e, i, n, prev) {
@@ -236,6 +238,7 @@ function vEjercicio(s, e, i, n, prev) {
         <span class="tags">${grupos.map(tag).join("")}${e.unilateral ? `<span class="tag line">×2 unilateral</span>` : ""}</span>
       </button>
       <span class="ej-count mono">${hechas}/${e.series.length}</span>
+      <button class="chev ${abierto ? "" : "cerrado"}" data-e="plegar" data-id="${e.ejercicioId}" aria-label="${abierto ? "Plegar" : "Desplegar"} ${C.esc(e.nombre)}"></button>
     </div>
     ${abierto ? `<div class="series">
       ${e.series.map((st, j) => {
@@ -332,14 +335,14 @@ function vProgresion() {
   }).filter(Boolean);
   const b = mejorPrevio(E.progEj, null);
   return selectorRango("prog", E.progRango) + `
-  <div class="card"><p class="card-title">Récords · ${C.esc(nombre)}</p>
+  <div class="card" data-sec="records-ej"><p class="card-title">Récords · ${C.esc(nombre)}</p>
     <div class="grid3">
       <div class="stat"><b>${b.pMax ? C.nf(b.pMax, b.pMax % 1 ? 1 : 0) : "—"}</b><span>kg peso máximo</span></div>
       <div class="stat"><b class="acc">${b.e1 ? C.nf(Math.round(b.e1)) : "—"}</b><span>kg 1RM estimado</span></div>
       <div class="stat"><b>${b.fecha ? `${fmtNum(b.peso)}×${b.reps}` : "—"}</b><span>${b.fecha ? C.esc(C.fecha(b.fecha)) : "mejor serie"}</span></div>
     </div>
     <p class="muted" style="margin:0">1RM estimado con la fórmula de Epley, solo con series de hasta 12 repeticiones.</p></div>
-  ${pts.length >= 2 ? `<div class="card"><p class="card-title">Evolución · ${C.esc(nombre)}</p>${grafLinea(pts)}</div>`
+  ${pts.length >= 2 ? `<div class="card" data-sec="evolucion"><p class="card-title">Evolución · ${C.esc(nombre)}</p>${grafLinea(pts)}</div>`
     : `<div class="card vacio"><p>Hacen falta al menos 2 sesiones de este ejercicio en el periodo para ver la gráfica.</p></div>`}
   ${vRecords()}`;
 }
@@ -524,7 +527,7 @@ function vHistorial() {
 /* ---------- ajustes de entreno (se muestran en la pestaña Ajustes) ---------- */
 export function vAjustes() {
   const a = C.S.ajustes.entreno, r = a.rangos || {};
-  return `<form class="card" id="aj-entreno"><p class="card-title">Entreno</p>
+  return `<form id="aj-entreno" class="pila"><div class="card"><p class="card-title">Entreno</p>
     <div class="grid2">
       <label class="campo">Descanso entre series (min)<input name="descansoMin" inputmode="decimal" value="${fmtNum(a.descansoMin)}"></label>
       <label class="campo">Duración de una serie (s)<input name="segundosSerie" inputmode="numeric" value="${a.segundosSerie}"></label>
@@ -532,14 +535,16 @@ export function vAjustes() {
     <label class="check"><input type="checkbox" name="sonido" ${a.sonido !== false ? "checked" : ""}><span>Sonido al terminar el descanso</span></label>
     <div class="btn-row"><button class="btn sm" type="button" data-e="probar-sonido">Probar sonido</button></div>
     <label class="campo">Criterios de registro (uno por línea)<textarea name="criterios" rows="5">${C.esc((a.criterios || []).join("\n"))}</textarea></label>
-    <p class="card-title" style="margin-top:6px">Rangos semanales de series</p>
+    <div class="btn-row"><button class="btn primary" type="submit">Guardar entreno</button></div>
+  </div>
+  <div class="card"><p class="card-title">Rangos semanales de series</p>
     <p class="muted" style="margin:0">Series efectivas por semana. Deja un grupo en blanco para no darle rango (no contará en la nota).</p>
     <div class="rangos">
       <span></span><span class="muted">Desde</span><span class="muted">Hasta</span>
       ${GRUPOS.map(g => `<span>${C.esc(g)}</span>${[["min", "desde"], ["max", "hasta"]].map(([k, t]) => `<input inputmode="decimal" name="r|${g}|${k}" value="${r[g] ? fmtNum(r[g][k]) : ""}" aria-label="${C.esc(g)} ${t}">`).join("")}`).join("")}
     </div>
-    <div class="btn-row"><button class="btn primary" type="submit">Guardar entreno</button></div>
-  </form>`;
+    <div class="btn-row"><button class="btn primary" type="submit">Guardar rangos</button></div>
+  </div></form>`;
 }
 function guardarAjustesEntreno(form) {
   const f = new FormData(form), a = C.S.ajustes.entreno;
@@ -596,6 +601,11 @@ export function click(e) {
       const ej = ejercicioDe(b.dataset.id); if (!ej) break;
       conSesion(s => s.ejercicios.push({ ejercicioId: ej.id, nombre: ej.nombre, grupos: { ...ej.grupos }, unilateral: !!ej.unilateral, series: [{ peso: null, reps: null }] }));
       E.picker = false; E.q = ""; break;
+    }
+    case "plegar-todos": {
+      const s = sesionDe(E.fecha); if (!s) break;
+      const todos = s.ejercicios.every(e => E.plegados.has(e.ejercicioId));
+      s.ejercicios.forEach(e => todos ? E.plegados.delete(e.ejercicioId) : E.plegados.add(e.ejercicioId)); break;
     }
     case "plegar": { const id = b.dataset.id; E.plegados.has(id) ? E.plegados.delete(id) : E.plegados.add(id); break; }
     case "mas-serie": conSesion(s => { s.ejercicios[i].series.push({ peso: null, reps: null }); }); break;

@@ -193,10 +193,6 @@ main { flex: 1; width: 100%; max-width: 760px; margin: 0 auto; padding: 14px 16p
 .badge-rec { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 999px; background: var(--rec); color: #1A1300; font-family: "Orbitron", sans-serif; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; }
 :root[data-theme="claro"] .badge-rec { color: #FFFFFF; }
 .ej-actions { display: flex; align-items: center; gap: 6px; padding-top: 2px; }
-.criterios summary { cursor: pointer; list-style: none; }
-.criterios summary::-webkit-details-marker { display: none; }
-.criterios summary::after { content: " +"; color: var(--mute); }
-.criterios[open] summary::after { content: " −"; }
 
 /* selector de ejercicios y listas */
 .buscar { min-height: 44px; padding: 0 12px; background: var(--surf2); border: 1px solid var(--line); border-radius: 10px; font-size: 16px; width: 100%; }
@@ -281,3 +277,15 @@ body:has(#rest .rest) main { padding-bottom: 176px; }
 .aviso-version { position: fixed; left: 50%; transform: translateX(-50%); top: calc(76px + env(safe-area-inset-top)); z-index: 60; display: flex; align-items: center; gap: 10px; width: min(480px, calc(100vw - 24px)); padding: 10px 12px 10px 14px; background: var(--surf); border: 1px solid var(--acc); border-radius: 14px; box-shadow: var(--glow-box), 0 8px 24px rgba(0, 0, 0, 0.35); font-weight: 600; }
 .aviso-version span { flex: 1; }
 .gbtn { min-height: 44px; display: flex; justify-content: center; color-scheme: normal; }
+
+/* apartados plegables */
+.plegable > .card-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 30px; margin: -4px 0; cursor: pointer; user-select: none; -webkit-user-select: none; }
+.plegable > .card-title::after { content: ""; flex: 0 0 auto; width: 9px; height: 9px; margin: -5px 4px 0 0; border-right: 2px solid var(--acc); border-bottom: 2px solid var(--acc); transform: rotate(45deg); transition: transform 0.2s, margin 0.2s; }
+.plegada > .card-title::after { transform: rotate(-45deg); margin-top: 0; border-color: var(--mute); }
+.plegada > :not(.card-title) { display: none !important; }
+.plegada { gap: 0; }
+.plegada > .card-title { color: var(--mute); }
+.pila { display: flex; flex-direction: column; gap: 12px; }
+.chev { width: 32px; height: 32px; flex: 0 0 auto; background: none; border: none; display: inline-flex; align-items: center; justify-content: center; margin: -2px -6px 0 -4px; }
+.chev::after { content: ""; width: 9px; height: 9px; margin-top: -5px; border-right: 2px solid var(--acc); border-bottom: 2px solid var(--acc); transform: rotate(45deg); transition: transform 0.2s, margin 0.2s; }
+.chev.cerrado::after { transform: rotate(-45deg); margin-top: 0; border-color: var(--mute); }
