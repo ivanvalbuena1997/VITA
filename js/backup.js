@@ -50,6 +50,10 @@ export const DOCUMENTACION = {
     pasos: "Zancada = altura · 0,415; ritmo 4,5 km/h; 3,5 MET.",
     entrenamiento: "Series a 6 MET durante segundosSerie y descansos a 1,5 MET durante descansoMin; las unilaterales cuentan doble.",
     digestion: "Efecto térmico de los alimentos: aproximadamente un 10 % de las kcal comidas.",
+    cardio: "Cinta (ACSM): VO2 = 0,1·v + 1,8·v·pendiente, v en m/min; bici: VO2 = 1,8·W·6,12/peso + 3,5; kcal = VO2·peso·min/1000·5. Bici sin vatios: 5,5/6,8/8,8 MET. Los pasos de la cinta con reloj se descuentan de los del día.",
+    peso_de_calculo: "Media de los últimos 7 pesajes de los 30 días anteriores; con menos de 4, el peso de referencia del perfil.",
+    calibracion: "Si en 4 semanas hay 6 pesajes en 21+ días y 14 días con comida: gasto real = comida media − pendiente del peso (kg/día) · 7.700; factor = real / estimado, limitado a ±25 %.",
+    objetivo_sugerido: "Media del gasto (calibrado si se puede) de los últimos 7 días con actividad + ajuste del usuario. Nunca se aplica sin aceptarlo.",
     rm1: "1RM estimado (Epley) = peso · (1 + reps/30), solo hasta 12 repeticiones."
   }
 };

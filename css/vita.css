@@ -373,3 +373,12 @@ body.con-hoja { overflow: hidden; }
 .reparto input { text-align: center; padding: 0 4px; }
 /* Las filas de las listas con scroll no se encogen (en pantallas bajas se aplastaban) */
 .lista > *, .items > *, .hoja-cuerpo > *, .series > *, .card > * { flex-shrink: 0; }
+
+/* ---------- progreso ---------- */
+.seg3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.fila-dato { display: flex; align-items: center; gap: 12px; }
+.num.grande { width: 150px; min-height: 52px; font-size: 24px; }
+.row.total { border-top: 1px solid var(--acc); }
+.row.total > span:last-child { color: var(--text); }
+.g-obj { stroke: var(--text); stroke-width: 1.5; stroke-dasharray: 6 4; opacity: 0.7; }
+.sub-form { padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surf2); }

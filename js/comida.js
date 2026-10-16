@@ -109,7 +109,7 @@ function pintarHoja() {
   F.hoja._enfocados = F.hoja._enfocados || [];
   if (foco && !F.hoja._enfocados.includes(clave)) { F.hoja._enfocados.push(clave); setTimeout(() => { foco.focus(); if (foco.select) foco.select(); }, 60); }
 }
-function confirmar(titulo, texto, boton, accion, peligro = true) {
+export function confirmar(titulo, texto, boton, accion, peligro = true) {
   abrirHoja({ tipo: "confirmar", titulo, texto, boton, accion, peligro, previa: F.hoja && F.hoja.tipo !== "confirmar" ? F.hoja : null });
 }
 
@@ -720,7 +720,7 @@ export function click(e) {
   switch (act) {
     case "cerrar-hoja": cerrarHoja(); return true;
     case "confirmar-no": if (h.previa) { F.hoja = h.previa; pintarHoja(); } else cerrarHoja(); return true;
-    case "confirmar-si": { const acc = h.accion; if (h.previa) F.hoja = h.previa; acc(); return true; }
+    case "confirmar-si": { const acc = h.accion; if (h.previa) F.hoja = h.previa; acc(); if (F.hoja === h) cerrarHoja(); return true; }
     /* navegación */
     case "dia": F.fecha = sumarDias(F.fecha, +b.dataset.n); break;
     case "hoy": F.fecha = hoyISO(); break;
@@ -927,7 +927,7 @@ export function vAjustes() {
   return `<form class="card" id="aj-objetivo"><p class="card-title">Objetivo de comida</p>
     <div class="grid2"><label class="campo">Calorías al día<input name="kcal" inputmode="numeric" value="${o.kcal}"></label>
       <label class="campo">Fibra (g)<input name="fibra" inputmode="decimal" value="${String(o.fibra).replace(".", ",")}"></label></div>
-    <p class="muted" style="margin:0">Objetivo fijo para todos los días. En la 0.4 la app te sugerirá uno según tu gasto medio semanal, y solo cambiará si lo aceptas.</p>
+    <p class="muted" style="margin:0">Objetivo fijo para todos los días. En Progreso → Gasto tienes uno sugerido según tu gasto medio semanal; solo cambia si lo aceptas.</p>
     <div class="sub-label">Macros: en % de las calorías o en g por kg</div>
     ${macro("prot", "Proteína")}${macro("hid", "Hidratos")}${macro("gra", "Grasas")}
     <div class="sub-label">Reparto por comidas (% de las kcal)</div>
