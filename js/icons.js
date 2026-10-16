@@ -23,7 +23,9 @@ export const ICON = {
   papelera: "M4 6.5h16 M9.5 6.5V4h5v2.5 M6 6.5l1 13.5h10l1-13.5 M10 10.5v6 M14 10.5v6",
   lapiz: "M15 4.5l4.5 4.5L9 19.5H4.5V15Z M12.5 7l4.5 4.5",
   izq: "M15 5l-7 7 7 7",
-  der: "M9 5l7 7-7 7"
+  der: "M9 5l7 7-7 7",
+  objetivo: "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18Z M12 7.5a4.5 4.5 0 1 0 0 9a4.5 4.5 0 1 0 0-9Z M12 11.2a.8.8 0 1 0 0 1.6a.8.8 0 1 0 0-1.6Z",
+  check: "M5 12.5l4.5 4.5L19 7.5"
 };
 
 export const icon = (nombre, size = 24, color = "currentColor") =>

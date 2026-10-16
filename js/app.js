@@ -7,6 +7,8 @@ import { importarCopias, volumenSesion, kcalDia } from "./import.js";
 import { crearCopia, esCopiaVita, descargar } from "./backup.js";
 import { icon, logo } from "./icons.js";
 import * as EN from "./entreno.js";
+import * as CO from "./comida.js";
+import { BASE } from "./comida-base.js";
 import { GOOGLE_CLIENT_ID } from "./config.js";
 
 /* Modo local (solo en localhost con ?local): datos en memoria, sin Firebase.
@@ -167,6 +169,7 @@ function esqueleto() {
     <main id="main"></main>
   </div>
   <div id="rest"></div>
+  <div id="hoja"></div>
   <div id="update"></div>
   <div id="toast"></div>`;
   $("tema").onclick = () => cambiarTema(temaActual() === "claro" ? "oscuro" : "claro");
@@ -262,7 +265,6 @@ function vHoy() {
   </div>
   <p class="muted" style="margin:0">Peso para los cálculos: ${pc.valor ? nf(pc.valor, 1) + " kg (" + esc(pc.fuente) + ")" : "falta el peso de referencia"}.</p></div>`);
   out.push(`<div class="card"><p class="card-title">Lo que viene</p><ul class="list">
-    <li>0.3 · Comida: alimentos, platos, diario, menús y compra.</li>
     <li>0.4 · Actividad y cuerpo: pasos, cardio, pesajes y gasto.</li>
     <li>0.5 · Hoy con balance y macros, resumen semanal y exportación para el entrenador IA.</li></ul></div>`);
   return out.join("");
@@ -272,14 +274,7 @@ const enConstruccion = (titulo, version, lineas) => `<div class="label">${titulo
   <div class="card"><p class="card-title">Llega en la ${version}</p><ul class="list">${lineas.map(l => `<li>${l}</li>`).join("")}</ul></div>`;
 
 const vEntreno = () => EN.vista();
-function vComida() {
-  const platos = S.alimentos.filter(a => a.tipo === "plato").length;
-  return enConstruccion("Comida", "0.3", [
-    `${S.alimentos.length - platos} productos, ${platos} platos, ${S.menus.length} menús y ${S.diario.length} días de diario ya sincronizados.`,
-    "Diario por comidas, biblioteca de menús y copia de comidas o días.",
-    "Fritos con aceite absorbido estimado y «Completar el objetivo» mejorado.",
-    "Objetivo en % o g/kg para cada macro y lista de la compra."]);
-}
+const vComida = () => CO.vista();
 function vProgreso() {
   return enConstruccion("Progreso", "0.4 y 0.5", [
     "Resumen semanal: volumen, ingesta, gasto, balance, proteína, pasos y peso.",
@@ -317,6 +312,7 @@ function vAjustes() {
     <div class="row"><span>Objetivo diario</span><span>${nf(a.objetivo.kcal)} kcal</span></div>
     <div class="btn-row"><button class="btn primary" type="submit">Guardar datos</button></div>
   </form>
+  ${CO.vAjustes()}
   ${EN.vAjustes()}
   <div class="card"><p class="card-title">Datos y copias</p>
     <div class="row"><span>Última copia descargada</span><span>${a.app.ultimaCopia ? esc(fecha(a.app.ultimaCopia)) : "nunca"}</span></div>
@@ -403,6 +399,7 @@ document.addEventListener("click", e => {
   const pl = e.target.closest(".plegable > .card-title");
   if (pl) { alternarPlegable(pl); return; }
   if (S.cargado && EN.click(e)) return;
+  if (S.cargado && CO.click(e)) return;
   const tm = e.target.closest("[data-tema]");
   if (tm) { cambiarTema(tm.dataset.tema); return; }
   const b = e.target.closest("[data-act]");
@@ -413,14 +410,15 @@ document.addEventListener("click", e => {
   if (act === "importar") importar();
   if (act === "cancelar-imp") { S.importacion = null; render(true); }
 });
-document.addEventListener("input", e => { if (S.cargado) EN.input(e.target); });
+document.addEventListener("input", e => { if (S.cargado && !EN.input(e.target)) CO.input(e.target); });
 document.addEventListener("change", e => {
   if (S.cargado && EN.change(e.target)) return;
+  if (S.cargado && CO.change(e.target)) return;
   if (e.target.id === "archivos" && e.target.files.length)
     leerArchivos(e.target.files).catch(err => toast(err.message, 5000));
 });
 document.addEventListener("submit", e => {
-  if (S.cargado && EN.submit(e.target)) { e.preventDefault(); return; }
+  if (S.cargado && (EN.submit(e.target) || CO.submit(e.target))) { e.preventDefault(); return; }
   if (e.target.id !== "cuerpo") return;
   e.preventDefault();
   const f = new FormData(e.target), p = S.ajustes.perfil;
@@ -451,9 +449,11 @@ async function arrancar() {
     if (!user) { S.user = null; pantallaLogin(); return; }
     S.user = user; S.cargado = false; esqueleto(); render();
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().then(v => { S.persistente = v; }).catch(() => {});
-    const recibidos = new Set();
-    pararEscucha = DB.escuchar(user.uid, (nombre, valor, pendiente) => {
+    const recibidos = new Set(), delServidor = new Set();
+    let baseHecha = false;
+    pararEscucha = DB.escuchar(user.uid, (nombre, valor, pendiente, desdeCache) => {
       S.pendiente[nombre] = pendiente;
+      if (!desdeCache) delServidor.add(nombre);
       if (nombre === "ajustes") {
         S.ajustes = valor || null;
         // 0.2.1: los rangos pasan a ser solo desde–hasta; se limpian los de antes
@@ -462,7 +462,9 @@ async function arrancar() {
           Object.keys(rg).forEach(g => { if (rg[g]) rg[g] = { min: rg[g].min, max: rg[g].max }; });
           DB.guardarAjustes(user.uid, S.ajustes).catch(() => {});
         }
-        if (!valor && !recibidos.has("ajustes")) {      // primera vez: ajustes iniciales
+        // Primera vez de verdad (el servidor confirma que no hay ajustes): ajustes iniciales.
+        // Si el aviso viene de la caché del dispositivo, se espera al servidor.
+        if (!valor && !recibidos.has("ajustes") && !desdeCache) {
           S.ajustes = ajustesPorDefecto(); S.ajustes.app.tema = temaActual();
           DB.guardarAjustes(user.uid, S.ajustes).catch(e => toast(mensajeError(e), 6000));
         }
@@ -471,6 +473,12 @@ async function arrancar() {
       else S[nombre] = valor;
       recibidos.add(nombre);
       S.cargado = recibidos.size >= 8 && !!S.ajustes;
+      // Alimentos base nuevos: solo con los datos ya confirmados por el servidor
+      if (!baseHecha && S.cargado && delServidor.has("alimentos") && delServidor.has("ajustes")) {
+        baseHecha = true;
+        const n = CO.sincronizarBase();
+        if (n) toast(`${n} alimentos base nuevos añadidos.`);
+      }
       render();
     }, e => pantallaLogin(mensajeError(e)));
   });
@@ -505,4 +513,8 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http") && !MOD
 }
 
 EN.init({ S, DB, render: () => render(true), toast, esc, nf, fecha, icon, mensajeError });
+CO.init({ S, DB, render: () => render(true), toast, esc, nf, fecha, icon, mensajeError,
+  peso: () => S.ajustes ? pesoDeCalculo().valor : null,
+  baseTotal: BASE.length,
+  reponerBase: () => { const n = CO.sincronizarBase(true); toast(n ? `${n} alimentos base repuestos.` : "Ya tienes todos los alimentos base."); render(true); } });
 arrancar();

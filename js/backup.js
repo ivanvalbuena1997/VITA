@@ -30,14 +30,16 @@ export const DOCUMENTACION = {
     valores_por_100: "Los valores de un alimento van por 100 g o 100 ml según su campo 'unidad'.",
     regla_g: "El campo 'g' de un item está en el mismo estado al que se refieren los valores por 100 de ese alimento: crudo en carne, arroz o pasta; tal cual en conservas y fiambres; plato ya terminado en los de tipo 'plato'. Macro = valor_por_100 * g / 100. No conviertas nada.",
     factor: "factor = peso cocinado / peso crudo. Solo sirve para convertir al apuntar y para estimar el peso de un plato. 0 = sin dato o no aplica.",
-    libre: "Items con libre=true son comidas fuera estimadas a ojo: sus valores son TOTALES, no por 100. 'precio' es lo que costó (0 = no apuntado)."
+    libre: "Items con libre=true son comidas fuera estimadas a ojo: sus valores son TOTALES, no por 100. 'precio' es lo que costó (0 = no apuntado).",
+    fritura: "En un plato, un ingrediente con 'frito' (número) se frió: absorbe ese % de su peso crudo en aceite (estimación: 8 % frito, 15 % rebozado). El aceite es el alimento 'aceiteId' del plato (o el AOVE de la base) y ya está sumado en los valores del plato; densidad usada 0,91 g/ml.",
+    archivado: "Un alimento con archivado=true se borró del catálogo pero se conserva porque lo usan días, menús o platos antiguos."
   },
   secciones: {
     ajustes: "Perfil (sexo, nacimiento, altura, peso de referencia), objetivo diario de macros, preferencias de entreno, rangos de volumen, preferencias de la app.",
     ejercicios: "Catálogo de ejercicios: id, nombre, grupos {grupo: peso}, unilateral.",
     sesiones: "Una por fecha. ejercicios[]: ejercicioId, nombre y grupos tal como estaban, unilateral, series[] {peso, reps, sugPeso?, sugReps?}.",
     dias: "Por fecha: pasos, peso (pesaje de ese día, solo si se pesó) y cardio[] (cinta: min, velocidad, inclinacion, km, pasosReloj, llevaba; bici: min, vatios, intensidad).",
-    alimentos: "Catálogo de productos y platos. Productos: codigo (si viene de la hoja de Drive), nombre, super, unidad, kcal/prot/hid/gra/fib por 100, precio, factor. Platos: ingredientes [{id, g en crudo}], pesoFinal, pesoTotal, raciones.",
+    alimentos: "Catálogo de productos y platos. Productos: codigo (si viene de la hoja de Drive), nombre, super, unidad, kcal/prot/hid/gra/fib por 100, precio, factor. Platos: ingredientes [{id, g en crudo, frito?}], aceiteId?, pesoFinal (pesado a mano, 0 = estimado), pesoTotal (el que se usa), raciones; sus kcal/prot/hid/gra/fib son por 100 g del plato terminado.",
     menus: "Plantillas reutilizables (no significan que se hayan comido).",
     diario: "Lo que se comió cada día: comidas {desayuno, almuerzo, comida, merienda, cena} con items {id, g} o items libres.",
     compra: "Lista de la compra en curso."
