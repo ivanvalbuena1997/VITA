@@ -19,4 +19,4 @@ export const FIREBASE_SDK = "13.0.0";
    usa el botón oficial de Google dentro de la página, sin ventanas ni
    redirecciones, que es lo que mejor funciona en el móvil. Vacío = solo la
    ventana emergente de Firebase. */
-export const GOOGLE_CLIENT_ID = "";
+export const GOOGLE_CLIENT_ID = "576134836176-6evv7sep9r1veluqglfg3ekbq2glnvan.apps.googleusercontent.com";
