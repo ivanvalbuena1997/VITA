@@ -1,7 +1,7 @@
 /* V.I.T.A. — service worker.
    IMPORTANTE: sube VERSION cada vez que cambie cualquier archivo de la app;
    así el móvil detecta la versión nueva y muestra el aviso «Actualizar». */
-const VERSION = "vita-0.5.0";
+const VERSION = "vita-0.5.1";
 const FIREBASE = "vita-firebase-13.0.0";   // cambia si cambia FIREBASE_SDK en js/config.js
 
 const APP = [
@@ -20,7 +20,7 @@ self.addEventListener("install", e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(APP.map(u => new Request(u, { cache: "reload" })))));
 });
 
-// La versión nueva espera a que el usuario pulse «Actualizar»
+// La versión nueva espera hasta que la app la activa (al abrirse o con «Actualizar»)
 self.addEventListener("message", e => { if (e.data === "activar") self.skipWaiting(); });
 
 self.addEventListener("activate", e => {

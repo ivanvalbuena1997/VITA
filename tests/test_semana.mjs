@@ -13,5 +13,10 @@ const json = JSON.stringify(e), txt = W.textoSemana(e);
 console.log("JSON:", json.length, "caracteres · texto:", txt.length, "caracteres");
 console.log(txt.slice(0, 2500));
 ok(e.dias.length === 7, "7 días");
+// Semana en curso: hoy cuenta para entreno pero no para las medias
+const R2 = W.resumenSemana("2026-10-12", r, "2026-10-14");
+ok(R2.completas.length === 2 && R2.comida.dias === 2, "hoy fuera de las medias: " + R2.comida.dias);
+const e2 = W.exportarSemana("2026-10-12", r, { hoy: "2026-10-14" });
+ok(e2.dias.length === 3 && e2.dias[2].en_curso === true, "día en curso marcado");
 console.log(fallos ? `${fallos} FALLOS` : "TODO CORRECTO");
 process.exit(fallos ? 1 : 0);

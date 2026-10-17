@@ -607,7 +607,7 @@ function abrirPlato(id) {
 }
 function borrarAlimento(id) {
   const a = mapa()[id]; if (!a) return;
-  const u = K.usosDe(id, activos(), C.S.menus, C.S.diario);
+  const u = K.usosDe(id, C.S.alimentos, C.S.menus, C.S.diario);   // también platos archivados: sus días antiguos dependen de él
   const usado = u.platos.length || u.menus.length || u.dias;
   const donde = [u.platos.length ? `${u.platos.length} plato(s)` : "", u.menus.length ? `${u.menus.length} menú(s)` : "", u.dias ? `${u.dias} día(s) del diario` : ""].filter(Boolean).join(", ");
   confirmar(`Borrar «${a.nombre}»`, usado
@@ -947,4 +947,6 @@ export function sincronizarBase(reponer = false) {
   return r.nuevos.length;
 }
 export const editando = () => !!F.hoja;
+/* A medianoche con la app abierta: si estabas en «hoy», pasa al nuevo día */
+export function nuevoDia(antes, hoy) { if (F.fecha === antes) F.fecha = hoy; F.semana = null; }
 document.addEventListener("keydown", e => { if (e.key === "Escape" && F.hoja) cerrarHoja(); });

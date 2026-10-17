@@ -41,6 +41,7 @@ function guardarDia(f, cambio) {
   if (vacio) { C.S.dias = C.S.dias.filter(x => x !== d); C.DB.borrarDoc(C.S.user.uid, "dias", f).catch(fallo); }
   else C.DB.guardarDoc(C.S.user.uid, "dias", f, JSON.parse(JSON.stringify(d))).catch(fallo);
 }
+export function nuevoDia(antes, hoy) { if (P.fecha === antes) P.fecha = hoy; }
 export function irHoy() { P.sub = "dia"; P.fecha = hoyISO(); P.cardio = null; }
 export function pesoHoy() { return A.pesoEn(C.S.dias, C.S.ajustes.perfil, hoyISO()); }
 
@@ -232,8 +233,8 @@ function vGasto() {
       <div class="row"><span>Gasto real según tu peso</span><span><b>${f0(cal.real)}</b> kcal</span></div>
       <div class="row"><span>Gasto según la fórmula</span><span><b>${f0(cal.estimado)}</b> kcal</span></div>
       <div class="row total"><span>Factor de corrección</span><span><b class="mono acc">× ${f2(cal.factor)}</b>${cal.limitado ? ` <span class="muted">(salía × ${f2(cal.bruto)}, limitado a ±25 %)</span>` : ""}</span></div>
-      <p class="muted" style="margin:0">Gasto real = comida media − cambio de peso × 7.700 kcal/kg, en las últimas 4 semanas (${esc(C.fecha(cal.desde))} – ${esc(C.fecha(cal.hasta))}). Supone que los días sin comida apuntada se parecen a los apuntados. ${usarCal ? "Se está aplicando." : "Desactivado en Ajustes."}</p>`
-    : `<p class="muted" style="margin:0">Aún no hay datos suficientes. Falta: ${esc(cal.falta.join(", "))}. Se necesitan, en las últimas 4 semanas, ${A.CALIBRACION.pesajesMin} pesajes repartidos en al menos ${A.CALIBRACION.diasMin} días y ${A.CALIBRACION.diarioMin} días con la comida apuntada.</p>`}</div>
+      <p class="muted" style="margin:0">Gasto real = comida media − cambio de peso × 7.700 kcal/kg, en las últimas 4 semanas (${esc(C.fecha(cal.desde))} – ${esc(C.fecha(cal.hasta))}). Solo cuenta los días con la comida completa (al menos la mitad del objetivo) y supone que los demás se parecen a ellos. ${usarCal ? "Se está aplicando." : "Desactivado en Ajustes."}</p>`
+    : `<p class="muted" style="margin:0">Aún no hay datos suficientes. Falta: ${esc(cal.falta.join(", "))}. Se necesitan, en las últimas 4 semanas, ${A.CALIBRACION.pesajesMin} pesajes repartidos en al menos ${A.CALIBRACION.diasMin} días y ${A.CALIBRACION.diarioMin} días con la comida completa (al menos la mitad de tu objetivo; los días con menos seguramente tienen comidas sin apuntar y no cuentan).</p>`}</div>
   <div class="card" data-sec="g-obj"><p class="card-title">Objetivo sugerido</p>
     ${sug.listo ? `
       <div class="kcal-hero"><div><b class="mono acc">${f0(sug.sugerido)}</b><span class="muted"> kcal/día</span></div><div class="kcal-resto"><span class="muted">ahora</span><b class="mono">${f0(objActual)}</b></div></div>

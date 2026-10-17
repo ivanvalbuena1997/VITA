@@ -25,8 +25,8 @@
   // Este archivo siempre llega fresco de la red, así que también rescata
   // versiones antiguas de la app que no llegaban a mostrar el aviso.
   if ("serviceWorker" in navigator && location.search.indexOf("local") < 0) {
-    var vitaRecarga = false;
-    navigator.serviceWorker.addEventListener("controllerchange", function () { if (!vitaRecarga) { vitaRecarga = true; location.reload(); } });
+    var vitaRecarga = false, vitaHabia = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener("controllerchange", function () { if (vitaHabia && !vitaRecarga) { vitaRecarga = true; location.reload(); } });
     navigator.serviceWorker.getRegistration().then(function (r) {
       if (r && r.waiting && navigator.serviceWorker.controller) r.waiting.postMessage("activar");
     }).catch(function () {});

@@ -70,5 +70,8 @@ ok(b.nuevos.length === 0, "base sin nuevos: " + b.nuevos.length);
 const b2 = K.baseNuevos(r.alimentos, [], true, () => "id");
 console.log("reponer base desde cero añadiría:", b2.nuevos.length);
 
+// 9) Los alimentos base nuevos tienen id fijo por código (dos dispositivos no los duplican)
+const b3 = K.baseNuevos(r.alimentos.filter(a => a.codigo !== "013"), r.ajustes.app.baseVistos.filter(c => c !== "013"), false, () => "aleatorio");
+ok(b3.nuevos.length === 1 && b3.nuevos[0].id === "base-013", "id fijo: " + JSON.stringify(b3.nuevos.map(x => x.id)));
 console.log(fallos ? `${fallos} FALLOS` : "TODO CORRECTO");
 process.exit(fallos ? 1 : 0);

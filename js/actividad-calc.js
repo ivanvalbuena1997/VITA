@@ -9,7 +9,8 @@
    - Pasos: zancada = altura · 0,415; ritmo 4,5 km/h; 3,5 MET.
    - Entreno: cada serie efectiva (las unilaterales cuentan doble) son
      segundosSerie a 6 MET + descansoMin a 1,5 MET.
-   - Cardio: cinta VO2 = 0,1·v + 1,8·v·pendiente (v en m/min); bici
+   - Cardio: cinta andando VO2 = 0,1·v + 1,8·v·pendiente, corriendo (> 8 km/h)
+     0,2·v + 0,9·v·pendiente (v en m/min); bici
      VO2 = 1,8·W·6,12/peso + 3,5; kcal = VO2 · peso · min / 1000 · 5.
      Bici sin vatios: 5,5 / 6,8 / 8,8 MET (suave / moderada / intensa).
    - Digestión (efecto térmico de los alimentos): ≈ 10 % de lo comido.
@@ -19,7 +20,7 @@ import { edadEn, toISO } from "./model.js";
 
 export const MET = { caminar: 3.5, serie: 6, descanso: 1.5, bici: { suave: 5.5, moderada: 6.8, intensa: 8.8 } };
 export const ZANCADA = 0.415, KMH_PASEO = 4.5, KCAL_POR_KG = 7700;
-export const CALIBRACION = { ventana: 28, diasMin: 21, pesajesMin: 6, diarioMin: 14, limite: 0.25 };
+export const CALIBRACION = { ventana: 28, diasMin: 21, pesajesMin: 6, diarioMin: 14, limite: 0.25, minimoComida: 0.5 };
 
 const n0 = v => { const n = parseFloat(String(v ?? "").replace(",", ".")); return Number.isFinite(n) && n > 0 ? n : 0; };
 const sumarDias = (iso, n) => { const d = new Date(iso + "T00:00:00"); d.setDate(d.getDate() + n); return toISO(d); };
@@ -70,7 +71,9 @@ export function cardioKcal(c, peso) {
   if (c.tipo === "cinta") {
     const v = n0(c.velocidad); if (!v) return 0;
     const S = v * 1000 / 60, G = n0(c.inclinacion) / 100;
-    return (0.1 * S + 1.8 * S * G) * peso * min / 1000 * 5;
+    // ACSM: andando (hasta unos 6-8 km/h) 0,1·v + 1,8·v·pendiente; corriendo (más de 8 km/h) 0,2·v + 0,9·v·pendiente
+    const vo2 = v > 8 ? 0.2 * S + 0.9 * S * G : 0.1 * S + 1.8 * S * G;
+    return vo2 * peso * min / 1000 * 5;
   }
   const w = n0(c.vatios);
   if (w) return (1.8 * w * 6.12 / peso + 3.5) * peso * min / 1000 * 5;
@@ -127,12 +130,15 @@ export function gastoDia(fecha, ctx) {
 export function calibracion(hasta, ctx) {
   const C = CALIBRACION, desde = sumarDias(hasta, -(C.ventana - 1));
   const pes = pesajes(ctx.dias).filter(p => p.fecha >= desde && p.fecha <= hasta);
-  const diasComida = Object.keys(ctx.ingesta).filter(f => f >= desde && f <= hasta).sort();
+  // Solo días con la comida completa: un día con menos de la mitad del objetivo
+  // casi seguro que tiene comidas sin apuntar y falsearía la calibración.
+  const minimo = (ctx.ajustes.objetivo.kcal || 0) * C.minimoComida;
+  const diasComida = Object.keys(ctx.ingesta).filter(f => f >= desde && f <= hasta && ctx.ingesta[f] >= minimo).sort();
   const span = pes.length >= 2 ? entre(pes[0].fecha, pes[pes.length - 1].fecha) : 0;
   const estado = { desde, hasta, pesajes: pes.length, span, diasComida: diasComida.length, listo: false, falta: [] };
   if (pes.length < C.pesajesMin) estado.falta.push(`${C.pesajesMin - pes.length} pesaje(s) más`);
   if (span < C.diasMin) estado.falta.push(`${C.diasMin - span} día(s) más entre el primer y el último pesaje`);
-  if (diasComida.length < C.diarioMin) estado.falta.push(`${C.diarioMin - diasComida.length} día(s) más con la comida apuntada`);
+  if (diasComida.length < C.diarioMin) estado.falta.push(`${C.diarioMin - diasComida.length} día(s) más con la comida completa apuntada`);
   if (estado.falta.length) return estado;
   const est = diasComida.map(f => gastoDia(f, ctx)).filter(g => g.total != null);
   if (est.length < C.diarioMin) { estado.falta.push("datos de perfil completos"); return estado; }

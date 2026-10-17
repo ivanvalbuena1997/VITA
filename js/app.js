@@ -1,6 +1,7 @@
-/* V.I.T.A. — base de la app: entrada con Google, sincronización,
-   pestañas, tema, importación de las copias antiguas y copia de seguridad.
-   Entreno vive en entreno.js (0.2). Comida y Progreso llegan en 0.3–0.5. */
+/* V.I.T.A. — base de la app: entrada con Google, sincronización, pestañas,
+   tema, importación de las copias antiguas y copia de seguridad.
+   Cada pestaña vive en su módulo: entreno.js, comida.js, actividad.js
+   (Progreso) y resumen.js (Hoy y resumen semanal). */
 
 import { APP_VERSION, ajustesPorDefecto, hoyISO, edadEn } from "./model.js";
 import { importarCopias } from "./import.js";
@@ -22,13 +23,14 @@ const DB = MODO_LOCAL ? await import("./db-local.js") : await import("./db.js");
 const S = {
   user: null, ajustes: null, compra: null,
   ejercicios: [], sesiones: [], dias: [], alimentos: [], menus: [], diario: [],
-  pendiente: {}, cache: {}, online: navigator.onLine,
-  tab: (location.hash || "#hoy").slice(1), importacion: null, persistente: null, cargado: false
+  pendiente: {}, online: navigator.onLine,
+  tab: "hoy", importacion: null, persistente: null, cargado: false
 };
 const TABS = [
   { id: "hoy", label: "Hoy" }, { id: "entreno", label: "Entreno" }, { id: "comida", label: "Comida" },
   { id: "progreso", label: "Progreso" }, { id: "ajustes", label: "Ajustes" }
 ];
+{ const h = location.hash.slice(1); if (TABS.some(t => t.id === h)) S.tab = h; }
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const nf = (n, d = 0) => Number(n).toLocaleString("es-ES", { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -215,8 +217,32 @@ document.addEventListener("keydown", e => {
   if (t && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); alternarPlegable(t); }
 });
 
+/* Si la app sigue abierta al pasar la medianoche, las pantallas que estaban
+   en «hoy» pasan al día nuevo en vez de quedarse en el de ayer. */
+let ultimoHoy = hoyISO();
+function comprobarDia() {
+  const hoy = hoyISO();
+  if (hoy === ultimoHoy) return false;
+  [EN, CO, AC].forEach(m => m.nuevoDia(ultimoHoy, hoy));
+  ultimoHoy = hoy;
+  return true;
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden && S.cargado && comprobarDia()) render(true); });
+
+/* Con el teclado del móvil abierto, las hojas inferiores suben por encima de él
+   (Chrome en Android no redimensiona la página al abrir el teclado). */
+if (window.visualViewport) {
+  const vv = window.visualViewport;
+  const ajustarTeclado = () => {
+    const k = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    document.documentElement.style.setProperty("--teclado", (k > 80 ? Math.round(k) : 0) + "px");
+  };
+  vv.addEventListener("resize", ajustarTeclado); vv.addEventListener("scroll", ajustarTeclado);
+}
+
 function render(forzar = false) {
   if (!forzar && S.cargado && escribiendo()) { renderPendiente = true; return; }
+  comprobarDia();
   renderPendiente = false;
   if (!$("main")) esqueleto();
   aplicarTema();
@@ -382,7 +408,7 @@ document.addEventListener("click", e => {
   const b = e.target.closest("[data-act]");
   if (!b) return;
   const act = b.dataset.act;
-  if (act === "salir") DB.salir();
+  if (act === "salir") { EN.guardarYa(); DB.salir(); }
   if (act === "copia") descargarCopia();
   if (act === "importar") importar();
   if (act === "cancelar-imp") { S.importacion = null; render(true); }
@@ -421,7 +447,7 @@ async function arrancar() {
     pantallaLogin("No se pudo cargar Firebase. La primera vez la app necesita conexión a internet.");
     return;
   }
-  DB.resultadoRedireccion().catch(e => pantallaLogin(mensajeError(e)));
+  DB.resultadoRedireccion().catch(e => { if (!S.user) pantallaLogin(mensajeError(e)); });
   DB.alCambiarUsuario(user => {
     if (pararEscucha) { pararEscucha(); pararEscucha = null; }
     if (!user) { S.user = null; pantallaLogin(); return; }
@@ -486,8 +512,11 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http") && !MOD
     // Una PWA puede quedarse abierta días: al volver a ella, se busca versión nueva
     document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update().catch(() => {}); });
   }).catch(() => {});
+  // Solo se recarga si ya había una versión controlando la página: la primera
+  // instalación (dispositivo nuevo) no debe recargar en mitad del inicio de sesión.
   let recargado = false;
-  navigator.serviceWorker.addEventListener("controllerchange", () => { if (!recargado) { recargado = true; location.reload(); } });
+  const habiaControlador = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (habiaControlador && !recargado) { recargado = true; location.reload(); } });
 }
 
 EN.init({ S, DB, render: () => render(true), toast, esc, nf, fecha, icon, mensajeError });

@@ -55,5 +55,12 @@ console.log("calibración real:", real.listo ? real.factor : real.falta);
 const sug = A.objetivoSugerido("2026-10-15", ctx);
 console.log("objetivo sugerido:", sug.listo ? `${sug.sugerido} kcal (media ${Math.round(sug.media)}, ${sug.dias} días, calibrado ${sug.calibrado})` : sug);
 
+// 7) Cinta corriendo (> 8 km/h) usa la ecuación de carrera del ACSM
+const run = { tipo: "cinta", min: 10, velocidad: 10, inclinacion: 1 }, Sr = 10 * 1000 / 60;
+ok(Math.abs(A.cardioKcal(run, 65) - (0.2 * Sr + 0.9 * Sr * 0.01) * 65 * 10 / 1000 * 5) < 1e-9, "cinta corriendo");
+// 8) La calibración ignora los días con menos de la mitad del objetivo
+const ing2 = { ...ing }; Object.keys(ing2).slice(0, 20).forEach(f => ing2[f] = 600);
+const cal2 = A.calibracion("2026-09-28", { dias, sesiones: [], ajustes: r.ajustes, ingesta: ing2 });
+ok(!cal2.listo && cal2.diasComida === 8, "días incompletos fuera: " + cal2.diasComida);
 console.log(fallos ? `${fallos} FALLOS` : "TODO CORRECTO");
 process.exit(fallos ? 1 : 0);

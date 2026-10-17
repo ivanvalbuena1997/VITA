@@ -90,14 +90,14 @@ function miniLinea(serie) {
 export function vSemana() {
   const hoy = hoyISO();
   if (!R.lunes) R.lunes = W.lunesDe(hoy);
-  const X = datos(), S = W.resumenSemana(R.lunes, X, hoy), aj = C.S.ajustes;
+  const X = datos(), S = W.resumenSemana(R.lunes, X, hoy);
   const actual = R.lunes === W.lunesDe(hoy);
   const fila = (n, v, extra = "") => `<div class="row"><span>${n}</span><span>${v}${extra ? ` <span class="muted">${extra}</span>` : ""}</span></div>`;
   const e = S.entreno, c = S.comida, a = S.actividad, p = S.peso;
   const tier = e.nota == null ? null : e.nota >= 85 ? "var(--acc)" : e.nota >= 70 ? "var(--text)" : e.nota >= 50 ? "var(--warn)" : "var(--bad)";
   return `<div class="card"><div class="fecha-nav">
       <button class="icon-btn sm" data-r="sem" data-n="-1" aria-label="Semana anterior">${C.icon("izq", 18)}</button>
-      <div style="flex:1;text-align:center"><b>${esc(C.fecha(S.lunes))} – ${esc(C.fecha(S.domingo))}</b><div class="muted">${actual ? `semana en curso · ${S.fechas.length} de 7 días` : "semana completa"}</div></div>
+      <div style="flex:1;text-align:center"><b>${esc(C.fecha(S.lunes))} – ${esc(C.fecha(S.domingo))}</b><div class="muted">${actual ? `semana en curso · las medias cuentan ${S.completas.length} día(s) completos` : "semana completa"}</div></div>
       <button class="icon-btn sm" data-r="sem" data-n="1" aria-label="Semana siguiente" ${actual ? "disabled" : ""}>${C.icon("der", 18)}</button></div></div>
   <div class="card" data-sec="s-entreno"><p class="card-title">Entreno</p>
     ${fila("Sesiones", `<b>${e.sesiones}</b>`)}${fila("Series", `<b>${e.series}</b>`)}${fila("Volumen", `<b>${f0(e.volumenKg)}</b> kg`)}

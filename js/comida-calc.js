@@ -333,7 +333,9 @@ export function baseNuevos(alimentos, vistos, reponer, crearId) {
     if (alimentos.some(a => !esPlato(a) && !a.archivado && (a.codigo === codigo || clave(a.nombre) === clave(nombre)))) return;
     const archivado = alimentos.find(a => !esPlato(a) && a.archivado && a.codigo === codigo);
     if (archivado) { nuevos.push({ ...archivado, archivado: false }); return; }
-    nuevos.push({ id: crearId(), tipo: "basico", codigo, nombre, super: sup, unidad: uni, kcal, gra, hid, fib, prot, precio, factor });
+    // Id fijo por código: si el móvil y el ordenador añaden a la vez el mismo
+    // alimento base, escriben el mismo documento en vez de crear dos.
+    nuevos.push({ id: alimentos.some(a => a.id === `base-${codigo}`) ? crearId() : `base-${codigo}`, tipo: "basico", codigo, nombre, super: sup, unidad: uni, kcal, gra, hid, fib, prot, precio, factor });
   });
   return { nuevos, vistos: [...new Set([...(vistos || []), ...visto])] };
 }

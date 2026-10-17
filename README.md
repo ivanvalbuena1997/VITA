@@ -10,12 +10,16 @@ ordenador con Firebase.
 |---|---|
 | `index.html` | Página de la app |
 | `css/vita.css` | Estilos (tema HUD oscuro y claro) |
-| `js/app.js` | Interfaz y arranque |
-| `js/db.js` | Firebase: inicio de sesión con Google y Firestore con caché sin conexión |
+| `js/app.js` | Arranque, inicio de sesión, pestañas, sincronización, Ajustes generales e importación |
+| `js/entreno.js` | Entreno: registrar, progresión, volumen e historial |
+| `js/comida.js` · `js/comida-calc.js` · `js/comida-base.js` | Comida: diario, semana, menús, alimentos, compra; cálculos; alimentos base |
+| `js/actividad.js` · `js/actividad-calc.js` | Progreso: pasos, peso, cardio y gasto con calibración |
+| `js/resumen.js` · `js/semana-calc.js` | Pantalla Hoy, resumen semanal y exportación para el entrenador IA |
+| `js/db.js` · `js/db-local.js` | Firebase (Auth + Firestore con caché sin conexión) · sustituto en memoria para probar con `?local` |
 | `js/model.js` | Modelo de datos, grupos musculares y ajustes por defecto |
 | `js/import.js` | Importador de las copias de GYM-TRACKER y FitCoock |
 | `js/backup.js` | Copia de seguridad única y autodescriptiva |
-| `js/config.js` | Configuración del proyecto Firebase (no es secreta) |
+| `js/config.js` | Configuración de Firebase y del botón de Google (no son secretos) |
 | `sw.js` | Service worker: funcionamiento sin conexión y aviso de versión nueva |
 | `fonts/` | Orbitron y Rajdhani (licencia SIL OFL 1.1) |
 
@@ -32,6 +36,13 @@ código: llegan con la importación y se editan en Ajustes.
 
 ## Pruebas
 
-`node tests/test_import.mjs copia-gym.json copia-fitcoock.json` comprueba que el importador
-conserva el volumen de cada sesión y las kcal de cada día. Las copias reales no se suben al
-repositorio.
+Con las copias reales fuera del repositorio:
+
+```
+node tests/test_import.mjs    gym.json fitcoock.json   # importador: volumen y kcal de cada día
+node tests/test_comida.mjs    gym.json fitcoock.json   # platos, objetivo, fritura, completar, compra
+node tests/test_actividad.mjs gym.json fitcoock.json   # entreno, cardio, gasto y calibración
+node tests/test_semana.mjs    gym.json fitcoock.json   # resumen semanal y exportación
+```
+
+Para probar la interfaz sin Firebase: servir la carpeta en `localhost` y abrir `/?local`.

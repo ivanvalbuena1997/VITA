@@ -90,6 +90,7 @@ function anteriorMismoDia(fecha) {
 /* ---------- guardado ---------- */
 let tGuardar = null, pendiente = null;
 export const editando = () => pendiente !== null;
+export function nuevoDia(antes, hoy) { if (E.fecha === antes) E.fecha = hoy; }
 function programarGuardado(ses, inmediato) {
   pendiente = ses;
   clearTimeout(tGuardar);
@@ -179,7 +180,11 @@ function pintarDescanso() {
 }
 document.addEventListener("click", e => {
   const b = e.target.closest("[data-rest]"); if (!b) return;
-  if (b.dataset.rest === "mas" && rest) { rest.fin += 30000; rest.hecho = false; pintarDescanso(); }
+  if (b.dataset.rest === "mas" && rest) {
+    if (rest.hecho) rest.fin = Date.now();       // si ya había terminado, +30 s desde ahora
+    rest.fin += 30000; rest.total = Math.max(rest.total, Math.round((rest.fin - Date.now()) / 1000));
+    rest.hecho = false; pantallaEncendida(true); pintarDescanso();
+  }
   if (b.dataset.rest === "saltar") pararDescanso();
 });
 
@@ -649,7 +654,8 @@ export function input(t) {
   if (!t.dataset.set) return false;
   const [i, j, campo] = t.dataset.set.split(":");
   const s = sesionDe(E.fecha); if (!s) return true;
-  const st = s.ejercicios[+i].series[+j];
+  const st = s.ejercicios[+i] && s.ejercicios[+i].series[+j];
+  if (!st) { C.render(); return true; }          // la sesión cambió en otro dispositivo: se repinta
   st[campo] = num(t.value);
   t.closest(".serie").classList.toggle("ok", completa(st));
   programarGuardado(s, false);
@@ -663,7 +669,8 @@ export function change(t) {
   if (!t.dataset.set) return false;
   const [i, j] = t.dataset.set.split(":").map(Number);
   const s = sesionDe(E.fecha); if (!s) return true;
-  const ej = s.ejercicios[i], st = ej.series[j];
+  const ej = s.ejercicios[i], st = ej && ej.series[j];
+  if (!st) { C.render(); return true; }
   guardarYa();
   if (completa(st)) {
     const clave = `${s.fecha}|${i}|${j}`;
