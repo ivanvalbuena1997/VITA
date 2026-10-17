@@ -107,6 +107,22 @@ export function sustituirTodo(uid, datos, existentes) {
 const ref = (uid, col, id) => F.fs.doc(F.db, "users", uid, col, String(id));
 export const guardarDoc = (uid, col, id, datos) => F.fs.setDoc(ref(uid, col, id), datos);
 export const borrarDoc = (uid, col, id) => F.fs.deleteDoc(ref(uid, col, id));
+/* Cambia solo los campos indicados (merge); null borra el campo. Así V.I.T.A. no
+   pisa lo que escriba la app compañera de Android en el mismo documento.
+   Con merge, Firestore mezclaría los mapas por dentro (un sueño a mano
+   conservaría las fases de Health Connect): los mapas se borran y se vuelven a
+   escribir en el mismo lote, que se aplica entero y en orden. */
+export function actualizarDoc(uid, col, id, campos) {
+  const r = ref(uid, col, id), b = F.fs.writeBatch(F.db), quitar = {}, datos = {};
+  Object.entries(campos).forEach(([k, v]) => {
+    if (v === null) { datos[k] = F.fs.deleteField(); return; }
+    datos[k] = v;
+    if (typeof v === "object" && !Array.isArray(v)) quitar[k] = F.fs.deleteField();
+  });
+  if (Object.keys(quitar).length) b.set(r, quitar, { merge: true });
+  b.set(r, datos, { merge: true });
+  return b.commit();
+}
 export function borrarVarios(uid, col, ids) {
   const commits = [];
   for (let i = 0; i < ids.length; i += 400) {

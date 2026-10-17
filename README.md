@@ -13,7 +13,7 @@ ordenador con Firebase.
 | `js/app.js` | Arranque, inicio de sesión, pestañas, sincronización, Ajustes generales e importación |
 | `js/entreno.js` | Entreno: registrar, progresión, volumen e historial |
 | `js/comida.js` · `js/comida-calc.js` · `js/comida-base.js` | Comida: diario, semana, menús, alimentos, compra; cálculos; alimentos base |
-| `js/actividad.js` · `js/actividad-calc.js` | Progreso: pasos, peso, cardio y gasto con calibración |
+| `js/actividad.js` · `js/actividad-calc.js` | Progreso: pasos, sueño, peso, cardio y gasto con calibración |
 | `js/resumen.js` · `js/semana-calc.js` | Pantalla Hoy, resumen semanal y exportación para el entrenador IA |
 | `js/db.js` · `js/db-local.js` | Firebase (Auth + Firestore con caché sin conexión) · sustituto en memoria para probar con `?local` |
 | `js/model.js` | Modelo de datos, grupos musculares y ajustes por defecto |
@@ -34,6 +34,10 @@ Los datos viven en Firestore (`users/{uid}/…`), protegidos por reglas que solo
 acceso a la cuenta del dueño. Los datos personales (nacimiento, altura, peso) no están en el
 código: llegan con la importación y se editan en Ajustes.
 
+Los documentos `dias/{fecha}` se escriben campo a campo (merge) porque también los rellena una
+app compañera de Android con los pasos y el sueño de Health Connect (`pasosFuente`,
+`sueno.fuente`: `health-connect` o `manual`; lo puesto a mano no se sobrescribe).
+
 ## Pruebas
 
 Con las copias reales fuera del repositorio:
@@ -43,6 +47,7 @@ node tests/test_import.mjs    gym.json fitcoock.json   # importador: volumen y k
 node tests/test_comida.mjs    gym.json fitcoock.json   # platos, objetivo, fritura, completar, compra
 node tests/test_actividad.mjs gym.json fitcoock.json   # entreno, cardio, gasto y calibración
 node tests/test_semana.mjs    gym.json fitcoock.json   # resumen semanal y exportación
+node tests/test_sueno.mjs     gym.json fitcoock.json   # sueño: lectura de horas, resumen, relación con el día
 ```
 
 Para probar la interfaz sin Firebase: servir la carpeta en `localhost` y abrir `/?local`.

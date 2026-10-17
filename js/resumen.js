@@ -5,6 +5,7 @@ import { hoyISO, toISO, APP_VERSION } from "./model.js";
 import * as W from "./semana-calc.js";
 import * as A from "./actividad-calc.js";
 import * as K from "./comida-calc.js";
+import { barraFases } from "./actividad.js";
 
 let C = null;
 export function init(ctx) { C = ctx; }
@@ -59,6 +60,17 @@ export function tarjetasHoy() {
     ${peso.valor ? `<p class="muted" style="margin:0">Proteína: <b>${f1(t.prot / peso.valor)}</b> de ${f1(o.prot / peso.valor)} g/kg.</p>` : ""}
     ${!di ? `<p class="muted" style="margin:0">Aún no has apuntado nada hoy.</p>` : ""}</div>`);
 
+  // Sueño de anoche
+  const su = A.suenoDe(C.S.dias.find(d => d.fecha === hoy)), objS = (aj.sueno || {}).objetivoH || A.SUENO_OBJETIVO_H;
+  const sem = A.resumenSueno(C.S.dias, Array.from({ length: 7 }, (_, i) => sumarDias(hoy, -i)), objS);
+  const colS = su ? (su.min >= objS * 60 ? "var(--ok)" : su.min >= objS * 60 - 60 ? "var(--acc)" : "var(--warn)") : null;
+  out.push(`<div class="card" data-sec="h-sueno"><p class="card-title">Sueño de anoche</p>
+    ${su ? `<div class="kcal-hero"><div><b class="mono" style="color:${colS}">${Math.floor(su.min / 60)}<small>h</small> ${String(Math.round(su.min % 60)).padStart(2, "0")}<small>min</small></b><span class="muted"> de ${f1(objS)} h</span></div>
+      ${su.inicio && su.fin ? `<div class="kcal-resto"><span class="muted">acostarse – despertar</span><b class="mono">${esc(su.inicio.slice(11, 16))}–${esc(su.fin.slice(11, 16))}</b></div>` : ""}</div>
+      ${barraFases(su.fases)}` : `<p class="muted" style="margin:0">Sin apuntar todavía.</p>`}
+    ${sem.noches ? `<p class="muted" style="margin:0">Últimos 7 días: ${f1(sem.mediaMin / 60)} h de media, ${sem.conObjetivo} de ${sem.noches} noches con ${f1(objS)} h o más.</p>` : ""}
+    <div class="btn-row"><button class="btn sm" data-r="ir-dia">${su ? "Corregir" : "Apuntar"}</button><button class="btn sm" data-r="ir-sueno">Ver sueño</button></div></div>`);
+
   // Peso
   const pes = A.pesajes(C.S.dias), ult = pes[pes.length - 1];
   const ult28 = pes.filter(p => p.fecha >= sumarDias(hoy, -27));
@@ -93,7 +105,8 @@ export function vSemana() {
   const X = datos(), S = W.resumenSemana(R.lunes, X, hoy);
   const actual = R.lunes === W.lunesDe(hoy);
   const fila = (n, v, extra = "") => `<div class="row"><span>${n}</span><span>${v}${extra ? ` <span class="muted">${extra}</span>` : ""}</span></div>`;
-  const e = S.entreno, c = S.comida, a = S.actividad, p = S.peso;
+  const e = S.entreno, c = S.comida, a = S.actividad, p = S.peso, z = S.sueno;
+  const objS = (C.S.ajustes.sueno || {}).objetivoH || A.SUENO_OBJETIVO_H;
   const tier = e.nota == null ? null : e.nota >= 85 ? "var(--acc)" : e.nota >= 70 ? "var(--text)" : e.nota >= 50 ? "var(--warn)" : "var(--bad)";
   return `<div class="card"><div class="fecha-nav">
       <button class="icon-btn sm" data-r="sem" data-n="-1" aria-label="Semana anterior">${C.icon("izq", 18)}</button>
@@ -115,13 +128,19 @@ export function vSemana() {
     ${fila(`Gasto medio${a.calibrado ? " calibrado" : ""}`, a.gastoMedio != null ? `<b>${f0(a.gastoMedio)}</b> kcal` : "—")}
     ${a.balanceMedio != null ? fila("Balance medio", `<b style="color:${a.balanceMedio > 0 ? "var(--warn)" : "var(--ok)"}">${a.balanceMedio > 0 ? "+" : "−"}${f0(Math.abs(a.balanceMedio))}</b> kcal/día`, `${a.diasBalance} días con comida`) : ""}
     ${!a.calibrado ? `<p class="muted" style="margin:0">Gasto sin calibrar con tu peso: la fórmula suele quedarse corta.</p>` : ""}</div>
+  <div class="card" data-sec="s-sueno"><p class="card-title">Sueño</p>
+    ${z.noches ? `${fila("Horas de media", `<b>${f1(z.mediaMin / 60)}</b> h`, `${z.noches} noches`)}
+    ${fila(`Noches con ${f1(objS)} h o más`, `<b>${z.conObjetivo}</b> de ${z.noches}`)}
+    ${fila("La más corta / la más larga", `${f1(z.minMin / 60)} / ${f1(z.maxMin / 60)} h`)}
+    ${z.acostarseMedia != null ? fila("Hora media de acostarse", `<b>${A.horaReloj(z.acostarseMedia)}</b>`, z.regularidad ? `± ${f0(z.regularidad.acostarse)} min` : "") : ""}
+    ${z.fases ? barraFases(z.fases) : ""}` : `<p class="muted" style="margin:0">Sin sueño apuntado esta semana.</p>`}</div>
   <div class="card" data-sec="s-peso"><p class="card-title">Peso</p>
     ${fila("Media de la semana", p.media != null ? `<b>${f1(p.media)}</b> kg` : "—", p.pesajes.length ? `${p.pesajes.length} pesajes` : "sin pesajes")}
     ${fila("Semana anterior", p.mediaAnterior != null ? `${f1(p.mediaAnterior)} kg` : "—")}
     ${p.cambio != null ? fila("Cambio", `<b>${p.cambio >= 0 ? "+" : "−"}${f2(Math.abs(p.cambio))}</b> kg`) : ""}
     ${fila("Tendencia (4 semanas)", p.kgSemana != null ? `<b>${p.kgSemana >= 0 ? "+" : "−"}${f2(Math.abs(p.kgSemana))}</b> kg/semana` : "—")}</div>
   <div class="card accent-suave" data-sec="s-export"><p class="card-title">Para el entrenador IA</p>
-    <p class="muted" style="margin:0">Toda la semana en un formato compacto (entreno serie a serie, comida por comidas, pasos, cardio, peso, gasto y resumen), con las reglas para interpretarlo. «Copiar texto» es lo más cómodo para pegarlo en un chat; el JSON sirve para guardarlo o pasarlo a un programa.</p>
+    <p class="muted" style="margin:0">Toda la semana en un formato compacto (entreno serie a serie, comida por comidas, pasos, sueño, cardio, peso, gasto y resumen), con las reglas para interpretarlo. «Copiar texto» es lo más cómodo para pegarlo en un chat; el JSON sirve para guardarlo o pasarlo a un programa.</p>
     <div class="btn-row"><button class="btn primary" data-r="copiar">${C.icon("copiar", 18)}Copiar texto</button><button class="btn" data-r="descargar">Descargar JSON</button></div></div>`;
 }
 
@@ -131,6 +150,7 @@ export function click(e) {
   switch (b.dataset.r) {
     case "sem": { const n = sumarDias(R.lunes, 7 * +b.dataset.n); if (n <= W.lunesDe(hoy)) R.lunes = n; C.render(); return true; }
     case "ir-dia": C.irA("progreso"); return true;
+    case "ir-sueno": C.irA("progreso", "sueno"); return true;
     case "copiar": case "descargar": {
       const exp = W.exportarSemana(R.lunes, datos(), { version: APP_VERSION, hoy });
       if (b.dataset.r === "copiar") {

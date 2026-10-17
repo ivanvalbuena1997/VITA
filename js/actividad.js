@@ -1,15 +1,18 @@
-/* V.I.T.A. — Progreso: actividad del día (pasos, peso, cardio), gráficas de
-   pasos y peso, y gasto con calibración y objetivo sugerido.
+/* V.I.T.A. — Progreso: actividad del día (pasos, sueño, peso, cardio),
+   gráficas de pasos, sueño y peso, y gasto con calibración y objetivo sugerido.
+   Los pasos y el sueño pueden llegar solos desde Health Connect (app
+   compañera): por eso los días se guardan campo a campo, sin pisar el resto.
    Los cálculos están en actividad-calc.js. */
 
 import { hoyISO, toISO } from "./model.js";
 import * as A from "./actividad-calc.js";
 import * as K from "./comida-calc.js";
+import { relacionSueno } from "./semana-calc.js";
 
 let C = null;
 export function init(ctx) { C = ctx; }
 
-const P = { sub: "dia", fecha: hoyISO(), rango: { pasos: "1m", peso: "3m", gasto: "1m" }, cardio: null };
+const P = { sub: "dia", fecha: hoyISO(), rango: { pasos: "1m", sueno: "1m", peso: "3m", gasto: "1m" }, cardio: null, sueno: false };
 const RANGOS = { "7d": 7, "1m": 30, "3m": 91, "6m": 182, "1y": 365 };
 const RANGO_TXT = { "7d": "7 días", "1m": "1 mes", "3m": "3 meses", "6m": "6 meses", "1y": "1 año" };
 
@@ -31,30 +34,50 @@ function ctxGasto() {
   C.S.diario.forEach(d => { const t = K.totalComidas(d.comidas, mapa); if (t.kcal > 0) ingesta[d.fecha] = t.kcal; });
   return { dias: C.S.dias, sesiones: C.S.sesiones, ajustes: C.S.ajustes, ingesta };
 }
-function guardarDia(f, cambio) {
+/* Guarda solo los campos que cambian (null = quitar el campo). Si el día se
+   queda sin datos, se borra. Así no se pisa lo que escriba la app compañera. */
+const DATOS_DIA = ["pasos", "peso", "cardio", "sueno"];
+function guardarDia(f, campos) {
   let d = diaDe(f);
   if (!d) { d = { fecha: f }; C.S.dias.push(d); }
-  cambio(d);
-  ["pasos", "peso"].forEach(k => { if (!(d[k] > 0)) delete d[k]; });
-  if (d.cardio && !d.cardio.length) delete d.cardio;
-  const vacio = !d.pasos && !d.peso && !d.cardio;
-  if (vacio) { C.S.dias = C.S.dias.filter(x => x !== d); C.DB.borrarDoc(C.S.user.uid, "dias", f).catch(fallo); }
-  else C.DB.guardarDoc(C.S.user.uid, "dias", f, JSON.parse(JSON.stringify(d))).catch(fallo);
+  const limpio = {};
+  Object.entries(campos).forEach(([k, v]) => {
+    const vacio = v == null || (Array.isArray(v) && !v.length);
+    if (vacio) delete d[k]; else d[k] = v;
+    limpio[k] = vacio ? null : JSON.parse(JSON.stringify(v));
+  });
+  if (!DATOS_DIA.some(k => d[k] != null)) {
+    C.S.dias = C.S.dias.filter(x => x !== d); C.DB.borrarDoc(C.S.user.uid, "dias", f).catch(fallo);
+  } else C.DB.actualizarDoc(C.S.user.uid, "dias", f, { fecha: f, ...limpio }).catch(fallo);
+}
+const hayHC = () => C.S.dias.some(d => d.sincronizado || d.pasosFuente === "health-connect" || (d.sueno && d.sueno.fuente === "health-connect"));
+const fuenteTxt = fu => fu === "health-connect" ? `<span class="chip fuente-hc">Health Connect</span>` : fu === "manual" ? `<span class="chip">a mano</span>` : "";
+const objSueno = () => (C.S.ajustes.sueno || {}).objetivoH || A.SUENO_OBJETIVO_H;
+const colorSueno = (min, obj) => min >= obj * 60 ? "var(--ok)" : min >= obj * 60 - 60 ? "var(--acc)" : "var(--warn)";
+const FASES = [{ k: "profundo", n: "Profundo", c: "var(--gra)" }, { k: "ligero", n: "Ligero", c: "var(--acc)" }, { k: "rem", n: "REM", c: "var(--prot)" }, { k: "despierto", n: "Despierto", c: "var(--hid)" }];
+/* Barra apilada de fases (minutos) con leyenda */
+export function barraFases(fases) {
+  if (!fases) return "";
+  const tot = FASES.reduce((s, x) => s + (fases[x.k] || 0), 0); if (!tot) return "";
+  return `<div class="fases">${FASES.map(x => fases[x.k] > 0 ? `<i style="width:${fases[x.k] / tot * 100}%;background:${x.c}" title="${x.n}"></i>` : "").join("")}</div>
+    <div class="leyenda">${FASES.filter(x => fases[x.k] > 0).map(x => `<span><i style="background:${x.c}"></i>${x.n} ${A.horasTxt(fases[x.k]).replace(/^0 h /, "")} · ${Math.round(fases[x.k] / tot * 100)} %</span>`).join("")}</div>`;
 }
 export function nuevoDia(antes, hoy) { if (P.fecha === antes) P.fecha = hoy; }
-export function irHoy() { P.sub = "dia"; P.fecha = hoyISO(); P.cardio = null; }
+export function irHoy(sub = "dia") { P.sub = sub; P.fecha = hoyISO(); P.cardio = null; P.sueno = false; }
 export function pesoHoy() { return A.pesoEn(C.S.dias, C.S.ajustes.perfil, hoyISO()); }
 
 /* ---------- gráficas SVG ---------- */
-function barras(puntos, { linea = null, color = "var(--acc)", alto = 200, unidad = "" } = {}) {
+function barras(puntos, { linea = null, color = "var(--acc)", alto = 200, unidad = "", fmt = f0, rejilla = null } = {}) {
   const W = 480, H = alto, L = 40, R = 6, T = 10, B = 26;
-  const max = Math.max(1, linea || 0, ...puntos.map(p => p.v || 0)) * 1.08;
+  let max = Math.max(1, linea || 0, ...puntos.map(p => p.v || 0)) * 1.08;
+  if (rejilla) max = Math.ceil(max / rejilla) * rejilla * 1.08;   // líneas en múltiplos de «rejilla» (p. ej. cada 2 h)
   const gap = (W - L - R) / Math.max(1, puntos.length), bw = Math.max(2, Math.min(26, gap * 0.72));
   const y = v => H - B - v / max * (H - T - B);
   const paso = Math.max(1, Math.ceil(puntos.length / 7));
-  const grid = [0, 1, 2, 3].map(i => { const v = max / 1.08 * i / 3, yy = y(v); return `<line x1="${L}" y1="${yy}" x2="${W - R}" y2="${yy}" class="g-grid"/><text x="${L - 5}" y="${yy + 4}" text-anchor="end" class="g-txt">${f0(v)}</text>`; }).join("");
+  const marcas = rejilla ? Array.from({ length: Math.round(max / 1.08 / rejilla) + 1 }, (_, i) => i * rejilla) : [0, 1, 2, 3].map(i => max / 1.08 * i / 3);
+  const grid = marcas.map(v => { const yy = y(v); return `<line x1="${L}" y1="${yy}" x2="${W - R}" y2="${yy}" class="g-grid"/><text x="${L - 5}" y="${yy + 4}" text-anchor="end" class="g-txt">${fmt(v)}</text>`; }).join("");
   const bars = puntos.map((p, i) => { const x = L + i * gap + (gap - bw) / 2;
-    return (p.v > 0 ? `<rect x="${x}" y="${y(p.v)}" width="${bw}" height="${H - B - y(p.v)}" rx="2" fill="${p.color || color}"><title>${esc(p.titulo || p.x)}: ${f0(p.v)} ${unidad}</title></rect>` : "")
+    return (p.v > 0 ? `<rect x="${x}" y="${y(p.v)}" width="${bw}" height="${H - B - y(p.v)}" rx="2" fill="${p.color || color}"><title>${esc(p.titulo || p.x)}: ${fmt(p.v)} ${unidad}</title></rect>` : "")
       + ((i % paso === 0 || i === puntos.length - 1) ? `<text x="${x + bw / 2}" y="${H - 8}" text-anchor="middle" class="g-txt">${esc(p.x)}</text>` : ""); }).join("");
   const obj = linea ? `<line x1="${L}" y1="${y(linea)}" x2="${W - R}" y2="${y(linea)}" class="g-obj"/>` : "";
   return `<svg viewBox="0 0 ${W} ${H}" class="graf" role="img">${grid}${bars}${obj}</svg>`;
@@ -85,10 +108,10 @@ const selector = (id, actual, opciones) => `<div class="seg seg${opciones.length
 
 /* ================= vista ================= */
 export function vista() {
-  const subs = [["dia", "Día"], ["semana", "Semana"], ["pasos", "Pasos"], ["peso", "Peso"], ["gasto", "Gasto"]];
-  const cuerpo = { dia: vDia, semana: () => C.vSemana(), pasos: vPasos, peso: vPeso, gasto: vGasto }[P.sub]();
+  const subs = [["dia", "Día"], ["semana", "Semana"], ["pasos", "Pasos"], ["sueno", "Sueño"], ["peso", "Peso"], ["gasto", "Gasto"]];
+  const cuerpo = ({ dia: vDia, semana: () => C.vSemana(), pasos: vPasos, sueno: vSueno, peso: vPeso, gasto: vGasto }[P.sub] || vDia)();
   return `<div class="label">Progreso</div>
-  <div class="seg seg5" role="tablist">${subs.map(([k, n]) => `<button data-asub="${k}" aria-pressed="${P.sub === k}">${n}</button>`).join("")}</div>
+  <div class="seg seg6" role="tablist">${subs.map(([k, n]) => `<button data-asub="${k}" aria-pressed="${P.sub === k}">${n}</button>`).join("")}</div>
   ${cuerpo}`;
 }
 
@@ -111,7 +134,9 @@ function vDia() {
     <div class="fila-dato"><input class="num grande" id="a-pasos" inputmode="numeric" value="${d.pasos || ""}" placeholder="0" aria-label="Pasos del día"><span class="muted">de ${f0(obj)}</span></div>
     <div class="mbar-pista grande"><i style="width:${pct}%;background:${pct >= 100 ? "var(--ok)" : "var(--acc)"}"></i></div>
     ${d.pasos && altura ? `<p class="muted" style="margin:0">≈ ${f1(A.kmPasos(d.pasos, altura))} km${g.descontados ? ` · se descuentan ${f0(g.descontados)} pasos de la cinta para no contarlos dos veces` : ""}.</p>` : ""}
-    <p class="muted" style="margin:0">De momento se apuntan a mano (por ejemplo, los de Mi Fitness al final del día).</p></div>
+    <div class="fila-fuente">${d.pasos ? fuenteTxt(d.pasosFuente) : ""}${d.pasosFuente === "manual" && hayHC() ? `<button class="btn sm" data-a="pasos-hc">Dejar a Health Connect</button>` : ""}</div>
+    <p class="muted" style="margin:0">${hayHC() ? "Llegan solos desde Health Connect. Si los cambias aquí, quedan «a mano» y la sincronización no los toca." : "De momento se apuntan a mano (por ejemplo, los de Mi Fitness al final del día). Cuando funcione la app compañera, llegarán solos desde Health Connect."}</p></div>
+  ${tarjetaSueno(f, d)}
   <div class="card" data-sec="d-peso"><p class="card-title">Peso</p>
     <div class="fila-dato"><input class="num grande" id="a-peso" inputmode="decimal" value="${d.peso ? String(d.peso).replace(".", ",") : ""}" placeholder="kg" aria-label="Peso del día en kg"><span class="muted">kg · opcional</span></div>
     <p class="muted" style="margin:0">Peso para los cálculos de este día: ${g.peso ? `<b>${f1(g.peso)} kg</b> (${esc(g.pesoFuente)})` : "falta"}.</p></div>
@@ -133,6 +158,30 @@ function vDia() {
       return `<div class="row"><span>Comido</span><span><b>${f0(g.ingesta)}</b> kcal</span></div>
       <div class="row"><span>Balance</span><span style="color:${bal > 0 ? "var(--warn)" : "var(--ok)"}"><b class="mono">${bal > 0 ? "+" : "−"}${f0(Math.abs(bal))}</b> kcal ${bal > 0 ? "superávit" : "déficit"}</span></div>`; })() : ""}
     <p class="muted" style="margin:0">Es una estimación (error típico de un 10–20 %). ${usarCal ? "Se corrige con la evolución real de tu peso." : "Cuando haya pesajes suficientes se calibrará con tu peso real (Progreso → Gasto)."}</p>`}</div>`;
+}
+/* ---------- sueño del día (la noche anterior) ---------- */
+const hm = min => `${Math.floor(min / 60)}<small>h</small> ${String(Math.round(min % 60)).padStart(2, "0")}<small>min</small>`;
+const horaDe = iso => iso && /T\d{2}:\d{2}/.test(iso) ? iso.slice(11, 16) : "";
+function tarjetaSueno(f, d) {
+  const s = A.suenoDe(d), obj = objSueno();
+  const col = s ? colorSueno(s.min, obj) : "var(--acc)";
+  return `<div class="card" data-sec="d-sueno"><p class="card-title">Sueño de la noche anterior</p>
+    ${s ? `<div class="kcal-hero"><div><b class="mono" style="color:${col}">${hm(s.min)}</b><span class="muted"> de ${f1(obj)} h</span></div>
+      ${horaDe(s.inicio) && horaDe(s.fin) ? `<div class="kcal-resto"><span class="muted">acostarse – despertar</span><b class="mono">${horaDe(s.inicio)}–${horaDe(s.fin)}</b></div>` : ""}</div>
+      <div class="mbar-pista grande"><i style="width:${Math.min(100, s.min / (obj * 60) * 100)}%;background:${col}"></i></div>
+      ${barraFases(s.fases)}
+      <div class="fila-fuente">${fuenteTxt(s.fuente)}${s.sesiones > 1 ? `<span class="muted">${s.sesiones} periodos (incluye siestas)</span>` : ""}</div>` : ""}
+    ${P.sueno || !s ? formSueno(s) : `<div class="btn-row">${s.fuente === "manual" && hayHC() ? `<button class="btn sm" data-a="sueno-hc">Dejar a Health Connect</button>` : ""}<button class="btn sm" data-a="sueno-editar">${C.icon("lapiz", 16)}Corregir</button></div>`}</div>`;
+}
+function formSueno(s) {
+  const h = s ? `${Math.floor(s.min / 60)}:${String(Math.round(s.min % 60)).padStart(2, "0")}` : "";
+  return `<form id="a-sueno" class="pila-form${s ? " sub-form" : ""}">
+    <div class="grid3">
+      <label class="campo">Horas dormidas<input name="horas" inputmode="decimal" value="${h}" placeholder="7:30"></label>
+      <label class="campo">Me acosté<input name="acostarse" type="time" value="${s ? horaDe(s.inicio) : ""}"></label>
+      <label class="campo">Me desperté<input name="despertar" type="time" value="${s ? horaDe(s.fin) : ""}"></label></div>
+    <p class="muted" style="margin:0">Horas dormidas sin contar los ratos despierto, como las da el reloj («7:30» o «7,5»). Si solo pones las horas de acostarte y despertarte, se usa la diferencia. ${hayHC() ? "Lo que corrijas aquí queda «a mano» y la sincronización no lo toca." : "Cuando funcione la app compañera, llegará solo desde Health Connect, con las fases."}</p>
+    <div class="btn-row">${s ? `<button class="btn sm danger" type="button" data-a="sueno-borrar">${C.icon("papelera", 16)}Quitar</button><button class="btn sm" type="button" data-a="sueno-cancelar">Cancelar</button>` : ""}<button class="btn sm primary" type="submit">Guardar</button></div></form>`;
 }
 function formCardio(d) {
   const c = P.cardio.idx != null ? (d.cardio || [])[P.cardio.idx] || {} : {};
@@ -181,6 +230,50 @@ function vPasos() {
     </div>
     ${con.length && altura ? `<p class="muted" style="margin:0">En ${RANGO_TXT[r].toLowerCase()}: ${f0(con.reduce((a, b) => a + b, 0))} pasos, unos ${f0(A.kmPasos(con.reduce((a, b) => a + b, 0), altura))} km.</p>` : ""}
     <p class="muted" style="margin:0">El objetivo se cambia en Ajustes → Actividad y gasto.</p></div>`;
+}
+
+/* ---------- sueño ---------- */
+function vSueno() {
+  const r = P.rango.sueno, n = RANGOS[r], hoy = hoyISO(), obj = objSueno();
+  const fechas = Array.from({ length: n }, (_, i) => sumarDias(hoy, -(n - 1 - i)));
+  const res = A.resumenSueno(C.S.dias, fechas, obj);
+  const puntos = fechas.map(f => { const s = A.suenoDe(diaDe(f)); return { x: corta(f), titulo: `Noche al ${corta(f)}`, v: s ? s.min / 60 : 0, color: s ? colorSueno(s.min, obj) : null }; });
+  const fasesTxt = res.fases ? barraFases(res.fases) : `<p class="muted" style="margin:0">Las fases llegarán con Health Connect si Mi Fitness las escribe; a mano solo se guardan las horas.</p>`;
+  // Análisis: últimos 90 días completos (hoy no, que aún no ha terminado)
+  const desde = sumarDias(hoy, -90), hasta = sumarDias(hoy, -1);
+  const rel = relacionSueno({ alimentos: C.S.alimentos, diario: C.S.diario, dias: C.S.dias, sesiones: C.S.sesiones, ajustes: C.S.ajustes }, desde, hasta, hoy);
+  const MIN = 3, validos = rel.filter(g => g.noches >= MIN);
+  const celda = (g, v) => g.noches < MIN ? `<span class="muted">—</span>` : v;
+  const filaRel = (nombre, fn) => `<tr><th>${nombre}</th>${rel.map(g => `<td>${celda(g, fn(g))}</td>`).join("")}</tr>`;
+  const val = (v, fmt, n) => v == null ? `<span class="muted">—</span>` : `${fmt(v)}${n != null ? `<small class="muted"> (${n})</small>` : ""}`;
+  return selector("sueno", r, ["7d", "1m", "3m"]) + `
+  <div class="card" data-sec="z-graf"><p class="card-title">Horas dormidas por noche</p>
+    ${res.noches ? barras(puntos, { linea: obj, unidad: "h", fmt: f1, rejilla: 2 }) : `<p class="muted" style="margin:0">Sin noches apuntadas en este periodo. Apúntalas en Progreso → Día.</p>`}
+    <p class="muted" style="margin:0">La raya es tu objetivo (${f1(obj)} h). Verde: lo cumple; azul: hasta 1 h menos; naranja: más de 1 h menos. Cada noche va en el día en que te despiertas.</p></div>
+  ${res.noches ? `<div class="card" data-sec="z-datos"><p class="card-title">Resumen · ${RANGO_TXT[r]}</p>
+    <div class="grid3">
+      <div class="stat"><b style="color:${colorSueno(res.mediaMin, obj)}">${f1(res.mediaMin / 60)}</b><span>horas de media (${res.noches} noches)</span></div>
+      <div class="stat"><b>${Math.round(res.conObjetivo / res.noches * 100)} %</b><span>noches con ${f1(obj)} h o más</span></div>
+      <div class="stat"><b>${f1(res.minMin / 60)}–${f1(res.maxMin / 60)}</b><span>la más corta y la más larga</span></div>
+    </div>
+    ${res.acostarseMedia != null ? `<div class="row"><span>Hora media de acostarse</span><span><b>${A.horaReloj(res.acostarseMedia)}</b>${res.regularidad ? ` <span class="muted">± ${f0(res.regularidad.acostarse)} min</span>` : ""}</span></div>` : ""}
+    ${res.despertarMedia != null ? `<div class="row"><span>Hora media de despertar</span><span><b>${A.horaReloj(res.despertarMedia)}</b>${res.regularidad && res.regularidad.despertar != null ? ` <span class="muted">± ${f0(res.regularidad.despertar)} min</span>` : ""}</span></div>` : ""}
+    ${res.regularidad ? `<p class="muted" style="margin:0">El «±» es la variación típica (desviación estándar) de la hora: cuanto menor, más regular es tu horario.</p>` : ""}
+    <div class="sub-label" style="margin-top:6px">Fases de media${res.fases ? ` · ${res.fases.noches} noches` : ""}</div>${fasesTxt}</div>` : ""}
+  <div class="card" data-sec="z-rel"><p class="card-title">Sueño y tus días</p>
+    <p class="muted" style="margin:0">Últimos 90 días. Agrupa las noches por lo que dormiste y compara el día siguiente. Entre paréntesis, cuántos días tienen ese dato. Hace falta al menos ${MIN} noches en un grupo para mostrarlo.</p>
+    ${validos.length >= 2 ? `<div class="tabla-scroll"><table class="tabla-rel">
+      <thead><tr><th></th>${rel.map(g => `<th>${esc(g.nombre)}<small>${g.noches} noches</small></th>`).join("")}</tr></thead>
+      <tbody>
+        ${filaRel("Comido", g => val(g.kcal, v => `${f0(v)} kcal`, g.diasComida))}
+        ${filaRel("Proteína", g => val(g.prot, v => `${f0(v)} g`, g.diasComida))}
+        ${filaRel("Balance", g => val(g.balance, v => `${v > 0 ? "+" : "−"}${f0(Math.abs(v))} kcal`, g.diasBalance))}
+        ${filaRel("Pasos", g => val(g.pasos, f0, g.diasPasos))}
+        ${filaRel("Días con entreno", g => val(g.pctEntreno, v => `${f0(v)} %`, null))}
+        ${filaRel("Volumen por sesión", g => val(g.volumenSesion, v => `${f0(v)} kg`, null))}
+      </tbody></table></div>
+      <p class="muted" style="margin:0">Es una asociación, no una causa: un día malo puede venir de dormir poco o al revés, y con pocos días las diferencias pueden ser casualidad. Fíjate en las que se repiten con el tiempo.</p>`
+    : `<p class="muted" style="margin:0">Aún no hay datos suficientes: hacen falta al menos dos grupos con ${MIN} noches o más (ahora: ${rel.map(g => `${esc(g.nombre)} ${g.noches}`).join(" · ")}).</p>`}</div>`;
 }
 
 /* ---------- peso ---------- */
@@ -253,8 +346,9 @@ export function vAjustes() {
       <label class="campo">Objetivo de pasos<input name="pasosObjetivo" inputmode="numeric" value="${a.actividad.pasosObjetivo || 8000}"></label>
       <label class="campo">Digestión (% de lo comido)<input name="digestionPct" inputmode="decimal" value="${String(g.digestionPct ?? 10).replace(".", ",")}"></label>
       <label class="campo">Ajuste del objetivo sugerido (kcal)<input name="ajusteObjetivo" inputmode="numeric" value="${g.ajusteObjetivo || 0}"></label>
+      <label class="campo">Objetivo de sueño (horas)<input name="suenoObjetivo" inputmode="decimal" value="${String(objSueno()).replace(".", ",")}"></label>
     </div>
-    <p class="muted" style="margin:0">Ajuste: negativo para definir (por ejemplo −300), positivo para volumen, 0 para mantener.</p>
+    <p class="muted" style="margin:0">Ajuste: negativo para definir (por ejemplo −300), positivo para volumen, 0 para mantener. Sueño: la AASM y la Sleep Research Society recomiendan 7 horas o más a los adultos.</p>
     <label class="check"><input type="checkbox" name="usarCalibracion" ${g.usarCalibracion !== false ? "checked" : ""}><span>Calibrar el gasto con la evolución de mi peso (cuando haya datos)</span></label>
     <div class="btn-row"><button class="btn primary" type="submit">Guardar</button></div></form>`;
 }
@@ -262,16 +356,21 @@ export function vAjustes() {
 /* ================= eventos ================= */
 export function click(e) {
   const t = e.target;
-  const s = t.closest("[data-asub]"); if (s) { P.sub = s.dataset.asub; P.cardio = null; C.render(); return true; }
+  const s = t.closest("[data-asub]"); if (s) { P.sub = s.dataset.asub; P.cardio = null; P.sueno = false; C.render(); return true; }
   const rg = t.closest("[data-arango]"); if (rg) { const [k, v] = rg.dataset.arango.split(":"); P.rango[k] = v; C.render(); return true; }
   const b = t.closest("[data-a]"); if (!b) return false;
   switch (b.dataset.a) {
-    case "dia": P.fecha = sumarDias(P.fecha, +b.dataset.n); if (P.fecha > hoyISO()) P.fecha = hoyISO(); P.cardio = null; break;
-    case "hoy": P.fecha = hoyISO(); P.cardio = null; break;
+    case "dia": P.fecha = sumarDias(P.fecha, +b.dataset.n); if (P.fecha > hoyISO()) P.fecha = hoyISO(); P.cardio = null; P.sueno = false; break;
+    case "hoy": P.fecha = hoyISO(); P.cardio = null; P.sueno = false; break;
+    case "pasos-hc": guardarDia(P.fecha, { pasos: null, pasosFuente: null }); C.toast("Se rellenarán en la próxima sincronización."); break;
+    case "sueno-editar": P.sueno = true; break;
+    case "sueno-cancelar": P.sueno = false; break;
+    case "sueno-borrar": guardarDia(P.fecha, { sueno: null }); P.sueno = false; C.toast("Sueño quitado."); break;
+    case "sueno-hc": guardarDia(P.fecha, { sueno: null }); C.toast("Se rellenará en la próxima sincronización."); break;
     case "cardio-nuevo": P.cardio = { tipo: b.dataset.v, idx: null }; break;
     case "cardio-editar": { const c = (diaDe(P.fecha) || {}).cardio[+b.dataset.i]; P.cardio = { tipo: c.tipo, idx: +b.dataset.i }; break; }
     case "cardio-cancelar": P.cardio = null; break;
-    case "cardio-borrar": { const i = P.cardio.idx; guardarDia(P.fecha, d => d.cardio.splice(i, 1)); P.cardio = null; C.toast("Cardio quitado."); break; }
+    case "cardio-borrar": { const l = ((diaDe(P.fecha) || {}).cardio || []).slice(); l.splice(P.cardio.idx, 1); guardarDia(P.fecha, { cardio: l }); P.cardio = null; C.toast("Cardio quitado."); break; }
     case "usar-objetivo": {
       const v = +b.dataset.v;
       C.confirmar(`Cambiar el objetivo a ${f0(v)} kcal`, `Tu objetivo diario pasa de ${f0(C.S.ajustes.objetivo.kcal)} a ${f0(v)} kcal. Los macros en % se recalculan solos; los que van en g/kg no cambian.`, "Cambiar", () => {
@@ -284,12 +383,16 @@ export function click(e) {
   C.render(); return true;
 }
 export function change(t) {
-  if (t.id === "a-fecha") { P.fecha = t.value && t.value <= hoyISO() ? t.value : hoyISO(); P.cardio = null; C.render(); return true; }
-  if (t.id === "a-pasos") { const v = Math.round(num(t.value) || 0); guardarDia(P.fecha, d => d.pasos = v); C.render(); return true; }
+  if (t.id === "a-fecha") { P.fecha = t.value && t.value <= hoyISO() ? t.value : hoyISO(); P.cardio = null; P.sueno = false; C.render(); return true; }
+  if (t.id === "a-pasos") {
+    const v = Math.round(num(t.value) || 0);
+    if (v > 150000) { C.toast("Esos pasos no parecen correctos."); return true; }
+    guardarDia(P.fecha, v > 0 ? { pasos: v, pasosFuente: "manual" } : { pasos: null, pasosFuente: null }); C.render(); return true;
+  }
   if (t.id === "a-peso") {
     const v = num(t.value);
     if (v != null && v > 0 && (v < 30 || v > 250)) { C.toast("Ese peso no parece correcto."); return true; }
-    guardarDia(P.fecha, d => d.peso = v ? Math.round(v * 10) / 10 : 0); C.render(); return true;
+    guardarDia(P.fecha, { peso: v ? Math.round(v * 10) / 10 : null }); C.render(); return true;
   }
   return false;
 }
@@ -301,8 +404,26 @@ export function submit(form) {
     else Object.assign(c, { vatios: num(fd.get("vatios")), intensidad: fd.get("intensidad") || "moderada" });
     if (!A.cardioMin(c)) { C.toast(tipo === "cinta" ? "Pon los minutos, o la distancia y la velocidad." : "Pon los minutos."); return true; }
     if (tipo === "cinta" && !c.velocidad) { C.toast("Pon la velocidad."); return true; }
-    guardarDia(P.fecha, d => { d.cardio = d.cardio || []; if (idx != null) d.cardio[idx] = c; else d.cardio.push(c); });
+    const l = ((diaDe(P.fecha) || {}).cardio || []).slice(); if (idx != null) l[idx] = c; else l.push(c);
+    guardarDia(P.fecha, { cardio: l });
     P.cardio = null; C.toast("Cardio guardado."); C.render(); return true;
+  }
+  if (form.id === "a-sueno") {
+    const fd = new FormData(form), f = P.fecha;
+    let min = A.leerHoras(fd.get("horas"));
+    const ac = String(fd.get("acostarse") || ""), de = String(fd.get("despertar") || "");
+    if (Number.isNaN(min)) { C.toast("No entiendo esas horas. Escribe, por ejemplo, 7:30 o 7,5."); return true; }
+    const aMin = x => { const [h, m] = x.split(":").map(Number); return h * 60 + m; };
+    const enCama = ac && de ? (aMin(de) - aMin(ac) + 1440) % 1440 : null;
+    if (min == null) min = enCama;
+    if (!min) { C.toast("Pon las horas dormidas (o la hora de acostarte y la de despertarte)."); return true; }
+    if (min < 30 || min > 16 * 60) { C.toast("Esas horas no parecen correctas."); return true; }
+    if (enCama != null && min > enCama + 5) { C.toast("Has dormido más horas de las que estuviste en la cama: revisa las horas."); return true; }
+    const sueno = { min, fuente: "manual" };
+    // La hora de acostarse es del día anterior salvo que sea de madrugada y antes de despertar
+    if (de) sueno.fin = `${f}T${de}:00`;
+    if (ac) sueno.inicio = `${ac >= "12:00" || (de && ac > de) ? sumarDias(f, -1) : f}T${ac}:00`;
+    guardarDia(f, { sueno }); P.sueno = false; C.toast("Sueño guardado."); C.render(); return true;
   }
   if (form.id === "aj-actividad") {
     const fd = new FormData(form), a = C.S.ajustes;
@@ -310,6 +431,7 @@ export function submit(form) {
     a.gasto.digestionPct = Math.min(20, Math.max(0, num(fd.get("digestionPct")) ?? 10));
     a.gasto.ajusteObjetivo = Math.round(num(fd.get("ajusteObjetivo")) || 0);
     a.gasto.usarCalibracion = !!fd.get("usarCalibracion");
+    a.sueno = { ...(a.sueno || {}), objetivoH: Math.min(12, Math.max(4, Math.round((num(fd.get("suenoObjetivo")) || A.SUENO_OBJETIVO_H) * 4) / 4)) };
     C.DB.guardarAjustes(C.S.user.uid, a).catch(fallo); C.toast("Guardado."); C.render(); return true;
   }
   return false;

@@ -3,7 +3,7 @@
    Unidades: peso en kg, altura en cm, energía en kcal, gramos en g o ml según
    el alimento, fechas AAAA-MM-DD en hora local. La semana empieza en lunes. */
 
-export const APP_VERSION = "0.5.2";
+export const APP_VERSION = "0.6.0";
 export const SCHEMA_VERSION = 1;
 
 /* Grupos musculares. Cada rango semanal es solo «desde–hasta» (series), fijado
@@ -107,6 +107,7 @@ export function ajustesPorDefecto() {
       rangos: JSON.parse(JSON.stringify(RANGOS_POR_DEFECTO))
     },
     actividad: { pasosObjetivo: 8000 },
+    sueno: { objetivoH: 7 },       // AASM / Sleep Research Society: 7 h o más en adultos
     gasto: {
       digestionPct: 10,            // efecto térmico de los alimentos, aprox. 10 % de lo comido
       usarCalibracion: true,       // corregir el gasto con la evolución real del peso

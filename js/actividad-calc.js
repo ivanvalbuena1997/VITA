@@ -167,3 +167,49 @@ export function objetivoSugerido(hoy, ctx) {
   const ajuste = ctx.ajustes.gasto.ajusteObjetivo || 0;
   return { listo: true, dias: dias.length, media, factor, calibrado: usar, ajuste, sugerido: Math.round((media + ajuste) / 10) * 10, cal };
 }
+
+/* ---------- sueño ----------
+   dias[].sueno = { min, inicio?, fin?, fases?: {profundo, ligero, rem, despierto}, sesiones?, fuente }
+   Una noche pertenece al día en que te despiertas. Referencia: la AASM y la
+   Sleep Research Society recomiendan 7 horas o más a los adultos. */
+export const SUENO_OBJETIVO_H = 7;
+/* "7:30", "7h30", "7,5" o "7.5" → minutos */
+export function leerHoras(txt) {
+  const s = String(txt ?? "").trim().toLowerCase().replace(/\s+/g, "");
+  if (!s) return null;
+  let m = /^(\d{1,2})[:h](\d{1,2})m?$/.exec(s);
+  if (m) { const h = +m[1], mi = +m[2]; return mi < 60 && h <= 24 ? h * 60 + mi : NaN; }
+  m = /^(\d{1,2})(?:[.,](\d+))?h?$/.exec(s);
+  if (m) { const v = parseFloat(m[1] + "." + (m[2] || "0")); return v <= 24 ? Math.round(v * 60) : NaN; }
+  return NaN;
+}
+export const horasTxt = min => min == null ? "—" : `${Math.floor(min / 60)} h ${String(Math.round(min % 60)).padStart(2, "0")} min`;
+export const suenoDe = d => d && d.sueno && d.sueno.min > 0 ? d.sueno : null;
+/* Minutos desde medianoche de una hora ISO; las horas de acostarse pasada la medianoche cuentan como +24 h */
+function minutosReloj(iso, acostarse) {
+  if (!iso) return null;
+  const m = /T(\d{2}):(\d{2})/.exec(iso); if (!m) return null;
+  let v = +m[1] * 60 + +m[2];
+  if (acostarse && v < 12 * 60) v += 24 * 60;
+  return v;
+}
+const desviacion = l => { if (l.length < 2) return null; const m = l.reduce((a, b) => a + b, 0) / l.length; return Math.sqrt(l.reduce((s, x) => s + (x - m) ** 2, 0) / l.length); };
+/* Resumen de un conjunto de noches: media, días con objetivo, fases medias y regularidad */
+export function resumenSueno(dias, fechas, objetivoH = SUENO_OBJETIVO_H) {
+  const noches = fechas.map(f => ({ fecha: f, s: suenoDe(dias.find(d => d.fecha === f)) })).filter(x => x.s);
+  if (!noches.length) return { noches: 0 };
+  const mins = noches.map(x => x.s.min);
+  const conFases = noches.filter(x => x.s.fases);
+  const fase = k => conFases.length ? conFases.reduce((s, x) => s + (x.s.fases[k] || 0), 0) / conFases.length : null;
+  const acost = noches.map(x => minutosReloj(x.s.inicio, true)).filter(v => v != null);
+  const desp = noches.map(x => minutosReloj(x.s.fin, false)).filter(v => v != null);
+  const med = l => l.length ? l.reduce((a, b) => a + b, 0) / l.length : null;
+  return {
+    noches: noches.length, mediaMin: med(mins), minMin: Math.min(...mins), maxMin: Math.max(...mins),
+    conObjetivo: mins.filter(m => m >= objetivoH * 60).length,
+    fases: conFases.length ? { noches: conFases.length, profundo: fase("profundo"), ligero: fase("ligero"), rem: fase("rem"), despierto: fase("despierto") } : null,
+    acostarseMedia: med(acost), despertarMedia: med(desp),
+    regularidad: acost.length >= 3 ? { acostarse: desviacion(acost), despertar: desviacion(desp) } : null
+  };
+}
+export const horaReloj = min => { if (min == null) return "—"; const v = Math.round(min) % (24 * 60); return `${Math.floor(v / 60)}:${String(v % 60).padStart(2, "0")}`; };

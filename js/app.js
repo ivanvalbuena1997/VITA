@@ -460,6 +460,8 @@ async function arrancar() {
       if (!desdeCache) delServidor.add(nombre);
       if (nombre === "ajustes") {
         S.ajustes = valor || null;
+        // Apartados que llegaron en versiones posteriores: valores por defecto (se guardan al cambiar Ajustes)
+        if (S.ajustes) { const def = ajustesPorDefecto(); ["actividad", "gasto", "sueno"].forEach(k => { if (!S.ajustes[k]) S.ajustes[k] = def[k]; }); }
         // 0.2.1: los rangos pasan a ser solo desde–hasta; se limpian los de antes
         const rg = S.ajustes && S.ajustes.entreno && S.ajustes.entreno.rangos;
         if (rg && Object.values(rg).some(x => x && ("mev" in x || "mrv" in x))) {
@@ -522,7 +524,7 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http") && !MOD
 EN.init({ S, DB, render: () => render(true), toast, esc, nf, fecha, icon, mensajeError });
 AC.init({ S, DB, render: () => render(true), toast, esc, nf, fecha, icon, mensajeError, confirmar: (...a) => CO.confirmar(...a), vSemana: () => RS.vSemana() });
 RS.init({ S, render: () => render(true), toast, esc, fecha, icon,
-  irA: tab => { if (tab === "progreso") AC.irHoy(); S.tab = tab; history.replaceState(null, "", "#" + tab); render(true); window.scrollTo(0, 0); } });
+  irA: (tab, sub) => { if (tab === "progreso") AC.irHoy(sub); S.tab = tab; history.replaceState(null, "", "#" + tab); render(true); window.scrollTo(0, 0); } });
 CO.init({ S, DB, render: () => render(true), toast, esc, nf, fecha, icon, mensajeError,
   peso: () => S.ajustes ? pesoDeCalculo().valor : null,
   baseTotal: BASE.length,
