@@ -412,3 +412,14 @@ body.con-hoja { overflow: hidden; }
 .tabla-rel td { white-space: nowrap; }
 /* Pantallas muy estrechas (320 px): la cabecera no cabía por 2 px */
 @media (max-width: 345px) { .top { gap: 8px; padding-left: 12px; padding-right: 12px; } .brand-name { font-size: 16px; letter-spacing: 0.1em; } }
+
+/* ---------- planificador (0.6.1) ---------- */
+.plan-ej { flex-wrap: wrap; row-gap: 6px; }
+.plan-ej > .item-main { flex: 1 1 100%; }
+.plan-ej .paso { display: inline-flex; align-items: center; gap: 2px; }
+.plan-ej .paso b { min-width: 30px; text-align: center; font-size: 17px; }
+.plan-ej .paso .icon-btn { font-size: 20px; font-weight: 700; border-color: var(--line); }
+.plan-ej .paso::after { content: "series"; font-size: 13px; color: var(--mute); margin-left: 6px; }
+.plan-mover { margin-left: auto; display: inline-flex; gap: 2px; }
+@media (min-width: 700px) { .plan-ej { flex-wrap: nowrap; } .plan-ej > .item-main { flex: 1 1 auto; } .plan-mover { margin-left: 8px; } }
+.chip .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }

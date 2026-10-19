@@ -1,10 +1,12 @@
-/* V.I.T.A. — módulo de Entreno: registrar, progresión, volumen e historial.
+/* V.I.T.A. — módulo de Entreno: registrar, planificar, ejercicios, progresión,
+   volumen e historial.
    Las sesiones se guardan una por fecha en Firestore (sesiones/{fecha}).
    Mientras escribes una serie, los cambios se guardan con un pequeño retraso
    y las actualizaciones que llegan de la nube no pisan lo que estás tecleando. */
 
 import { GRUPOS, hoyISO, toISO } from "./model.js";
 import { notaVolumen, OPCIONALES } from "./semana-calc.js";
+import * as PL from "./plan-calc.js";
 
 let C = null;                      // contexto que pasa app.js
 export function init(ctx) { C = ctx; }
@@ -14,8 +16,15 @@ const E = {
   sub: "registrar", fecha: hoyISO(), picker: false, q: "", creando: false, editandoEj: null, confirmEj: null,
   copiando: false, plegados: new Set(), progRango: "6m", progEj: null, punto: null,
   volRango: "6m", semana: null, anios: new Set([String(new Date().getFullYear())]),
-  meses: new Set([hoyISO().slice(0, 7)]), abierta: null, confirmBorrar: null, confirmTodo: false
+  meses: new Set([hoyISO().slice(0, 7)]), abierta: null, confirmBorrar: null, confirmTodo: false,
+  // planificador y catálogo
+  plan: null, planPicker: null, planAccion: null, copiarDia: null, ejQ: "", ejGrupo: null, pendEdit: null
 };
+/* Al cambiar de pestaña se cierran los formularios a medias */
+function cerrarFormularios() {
+  E.picker = false; E.planPicker = null; E.creando = false; E.editandoEj = null; E.confirmEj = null;
+  E.pendEdit = null; E.planAccion = null; E.copiarDia = null; E.q = "";
+}
 
 /* ---------- utilidades ---------- */
 const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
@@ -190,10 +199,10 @@ document.addEventListener("click", e => {
 
 /* ---------- vista principal ---------- */
 export function vista() {
-  const subs = [["registrar", "Registrar"], ["progresion", "Progresión"], ["volumen", "Volumen"], ["historial", "Historial"]];
-  const cuerpo = { registrar: vRegistrar, progresion: vProgresion, volumen: vVolumen, historial: vHistorial }[E.sub]();
+  const subs = [["registrar", "Registrar"], ["planificar", "Planificar"], ["ejercicios", "Ejercicios"], ["progresion", "Progresión"], ["volumen", "Volumen"], ["historial", "Historial"]];
+  const cuerpo = ({ registrar: vRegistrar, planificar: vPlanificar, ejercicios: vEjercicios, progresion: vProgresion, volumen: vVolumen, historial: vHistorial }[E.sub] || vRegistrar)();
   return `<div class="label">Entreno</div>
-  <div class="seg seg4" role="tablist">${subs.map(([k, n]) => `<button data-esub="${k}" aria-pressed="${E.sub === k}">${n}</button>`).join("")}</div>
+  <div class="seg seg6" role="tablist">${subs.map(([k, n]) => `<button data-esub="${k}" aria-pressed="${E.sub === k}">${n}</button>`).join("")}</div>
   ${cuerpo}`;
 }
 
@@ -292,34 +301,157 @@ function vCopiar() {
     <div class="btn-row"><button class="btn" data-e="copiar-cerrar">Cancelar</button></div></div>`;
 }
 
-function vPicker() {
-  if (E.creando || E.editandoEj) {
-    const ej = E.editandoEj ? ejercicioDe(E.editandoEj) : null;
-    const gs = ej ? Object.keys(ej.grupos || {}) : [];
-    return `<form class="card accent" id="form-ej"><p class="card-title">${ej ? "Editar ejercicio" : "Ejercicio nuevo"}</p>
-      <label class="campo">Nombre<input name="nombre" required value="${C.esc(ej ? ej.nombre : E.q)}"></label>
-      <fieldset class="grupos"><legend class="campo">Grupos que trabaja (cada serie cuenta entera en cada grupo marcado)</legend>
-        ${GRUPOS.map(g => `<label class="check"><input type="checkbox" name="g" value="${g}" ${gs.includes(g) ? "checked" : ""}><span>${g}</span></label>`).join("")}
-      </fieldset>
-      <label class="check"><input type="checkbox" name="uni" ${ej && ej.unilateral ? "checked" : ""}><span>Unilateral (se hace lado a lado)</span></label>
-      <div class="btn-row"><button class="btn primary" type="submit">${ej ? "Guardar cambios" : "Añadir a la sesión"}</button>
-      <button class="btn" type="button" data-e="form-cancelar">Cancelar</button></div></form>`;
+/* Formulario de ejercicio (crear o editar), común a Registrar, Planificar y Ejercicios */
+function formEjercicio() {
+  if (E.pendEdit) return preguntaEdicion();
+  const ej = E.editandoEj ? ejercicioDe(E.editandoEj) : null;
+  const gs = ej ? Object.keys(ej.grupos || {}) : [];
+  const crearTxt = E.sub === "registrar" ? "Añadir a la sesión" : E.sub === "planificar" ? "Añadir al plan" : "Crear ejercicio";
+  return `<form class="card accent" id="form-ej"><p class="card-title">${ej ? "Editar ejercicio" : "Ejercicio nuevo"}</p>
+    <label class="campo">Nombre<input name="nombre" required value="${C.esc(ej ? ej.nombre : E.q)}"></label>
+    <fieldset class="grupos"><legend class="campo">Grupos que trabaja (cada serie cuenta entera en cada grupo marcado)</legend>
+      ${GRUPOS.map(g => `<label class="check"><input type="checkbox" name="g" value="${g}" ${gs.includes(g) ? "checked" : ""}><span>${g}</span></label>`).join("")}
+    </fieldset>
+    <label class="check"><input type="checkbox" name="uni" ${ej && ej.unilateral ? "checked" : ""}><span>Unilateral (se hace lado a lado)</span></label>
+    <div class="btn-row"><button class="btn primary" type="submit">${ej ? "Guardar cambios" : crearTxt}</button>
+    <button class="btn" type="button" data-e="form-cancelar">Cancelar</button></div></form>`;
+}
+/* Al editar un ejercicio ya usado: ¿solo a lo nuevo o también al historial? */
+function preguntaEdicion() {
+  const p = E.pendEdit, ej = ejercicioDe(p.id) || {};
+  const cambios = [p.nombre !== ej.nombre ? `nombre «${C.esc(ej.nombre)}» → «${C.esc(p.nombre)}»` : null,
+    JSON.stringify(Object.keys(ej.grupos || {}).sort()) !== JSON.stringify(Object.keys(p.grupos).sort()) ? `grupos ${Object.keys(ej.grupos || {}).map(C.esc).join(", ") || "—"} → ${Object.keys(p.grupos).map(C.esc).join(", ")}` : null,
+    !!ej.unilateral !== p.unilateral ? (p.unilateral ? "pasa a unilateral" : "deja de ser unilateral") : null].filter(Boolean);
+  return `<div class="card accent"><p class="card-title">¿Aplicar también al historial?</p>
+    <p style="margin:0">Cambios: ${cambios.join("; ")}.</p>
+    <p class="muted" style="margin:0">«${C.esc(ej.nombre)}» aparece en <b>${p.n}</b> ${p.n === 1 ? "sesión registrada" : "sesiones registradas"}. Solo a lo nuevo: el historial conserva cómo se registró y su volumen no cambia. También al historial: esas sesiones se actualizan y el volumen pasado se recalcula con los grupos nuevos.</p>
+    <div class="btn-row"><button class="btn primary" data-e="edit-nuevo">Solo a lo nuevo</button><button class="btn" data-e="edit-historial">También al historial (${p.n})</button><button class="btn" data-e="edit-cancelar">Cancelar</button></div></div>`;
+}
+/* Fila de un ejercicio del catálogo con editar y eliminar (o su confirmación) */
+function filaCatalogo(e, accion, extra = "") {
+  if (E.confirmEj === e.id) {
+    const np = PL.planesCon(planes(), e.id).length;
+    return `<div class="item confirm"><span>¿Eliminar «${C.esc(e.nombre)}» del catálogo? Tus sesiones antiguas lo conservan.${np ? ` Se quitará de ${np === 1 ? "1 plan" : `${np} planes`}.` : ""}</span>
+      <span class="btn-row"><button class="btn danger sm" data-e="borrar-ej" data-id="${e.id}">Eliminar</button><button class="btn sm" data-e="no-borrar-ej">Cancelar</button></span></div>`;
   }
+  return `<div class="item franja" style="${franja(e.grupos)}">
+    <button class="item-main pick" data-e="${accion}" data-id="${e.id}"><b>${C.esc(e.nombre)}</b>
+      <span class="tags">${Object.keys(e.grupos || {}).map(tag).join("")}${e.unilateral ? `<span class="tag line">×2</span>` : ""}</span>${extra}</button>
+    <button class="icon-btn sm" data-e="editar-ej" data-id="${e.id}" aria-label="Editar ${C.esc(e.nombre)}">${C.icon("lapiz", 16)}</button>
+    <button class="icon-btn sm danger" data-e="pedir-borrar-ej" data-id="${e.id}" aria-label="Eliminar ${C.esc(e.nombre)}">${C.icon("papelera", 16)}</button>
+  </div>`;
+}
+function vPicker() {
+  if (E.creando || E.editandoEj || E.pendEdit) return formEjercicio();
   const q = E.q.toLowerCase();
   const lista = C.S.ejercicios.filter(e => e.nombre.toLowerCase().includes(q) || Object.keys(e.grupos || {}).some(g => g.toLowerCase().includes(q)))
     .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
-  return `<div class="card accent"><p class="card-title">Añadir ejercicio</p>
+  const destino = E.sub === "planificar" && E.planPicker != null ? ` al ${PL.DIAS_PLAN[E.planPicker].toLowerCase()}` : "";
+  return `<div class="card accent"><p class="card-title">Añadir ejercicio${destino}</p>
     <input class="buscar" id="e-buscar" placeholder="Buscar por nombre o grupo" value="${C.esc(E.q)}" autocomplete="off" aria-label="Buscar ejercicio">
-    <div class="lista">${lista.map(e => E.confirmEj === e.id ? `
-      <div class="item confirm"><span>¿Eliminar «${C.esc(e.nombre)}» del catálogo? Tus sesiones antiguas lo conservan.</span>
-        <span class="btn-row"><button class="btn danger sm" data-e="borrar-ej" data-id="${e.id}">Eliminar</button><button class="btn sm" data-e="no-borrar-ej">Cancelar</button></span></div>` : `
-      <div class="item franja" style="${franja(e.grupos)}">
-        <button class="item-main pick" data-e="elegir" data-id="${e.id}"><b>${C.esc(e.nombre)}</b>
-          <span class="tags">${Object.keys(e.grupos || {}).map(tag).join("")}${e.unilateral ? `<span class="tag line">×2</span>` : ""}</span></button>
-        <button class="icon-btn sm" data-e="editar-ej" data-id="${e.id}" aria-label="Editar ${C.esc(e.nombre)}">${C.icon("lapiz", 16)}</button>
-        <button class="icon-btn sm danger" data-e="pedir-borrar-ej" data-id="${e.id}" aria-label="Eliminar ${C.esc(e.nombre)}">${C.icon("papelera", 16)}</button>
-      </div>`).join("") || `<p class="muted">Sin coincidencias.</p>`}</div>
+    <div class="lista">${lista.map(e => filaCatalogo(e, "elegir")).join("") || `<p class="muted">Sin coincidencias.</p>`}</div>
     <div class="btn-row"><button class="btn" data-e="crear">${C.icon("mas", 16)}Crear ejercicio nuevo</button><button class="btn" data-e="picker-cerrar">Cerrar</button></div></div>`;
+}
+
+/* ---------- planificar ----------
+   Semanas tipo de lunes a domingo, sin fechas. Ver plan-calc.js. */
+const planes = () => (C.S.planes || []).map(PL.normalizar).sort((a, b) => (a.creado || "") < (b.creado || "") ? -1 : 1);
+const planActivo = () => (C.S.ajustes.entreno || {}).planActivo || null;
+function planSel() {
+  const l = planes();
+  return l.find(p => p.id === E.plan) || l.find(p => p.id === planActivo()) || l[0] || null;
+}
+function guardarPlan(p) {
+  p.actualizado = new Date().toISOString();
+  const limpio = limpia(p), i = C.S.planes.findIndex(x => x.id === p.id);
+  if (i >= 0) C.S.planes[i] = limpio; else C.S.planes.push(limpio);
+  C.DB.guardarDoc(C.S.user.uid, "planes", p.id, limpio).catch(err => C.toast("No se pudo guardar el plan: " + C.mensajeError(err), 6000));
+}
+function marcarActivo(id) {
+  C.S.ajustes.entreno.planActivo = id;
+  C.DB.guardarAjustes(C.S.user.uid, C.S.ajustes).catch(err => C.toast("No se pudo guardar: " + C.mensajeError(err), 5000));
+}
+const chipsGrupos = row => `<div class="mps">${GRUPOS.filter(g => row[g]).map(g => `<span class="mp" style="--c:${colorDe(g)}">${C.esc(g)} ${C.nf(row[g], row[g] % 1 ? 1 : 0)}</span>`).join("")}</div>`;
+function vPlanificar() {
+  const l = planes(), p = planSel(), activo = planActivo();
+  if (C.S.errorPlanes) return `<div class="card"><p class="card-title">Planificar</p><p class="err" style="margin:0">No se pueden leer los planes: ${C.esc(C.S.errorPlanes)}. Seguramente las reglas de Firestore no permiten la colección «planes».</p></div>`;
+  const acc = E.planAccion;
+  const formNombre = (titulo, valor, boton) => `<form id="pl-form" class="pila-form sub-form">
+    <label class="campo">${titulo}<input name="nombre" required maxlength="40" value="${C.esc(valor)}" autocomplete="off"></label>
+    ${acc === "historial" ? (() => { const sems = PL.semanasConSesiones(C.S.sesiones).slice(0, 26);
+      return sems.length ? `<label class="campo">Semana<select name="semana">${sems.map(w => `<option value="${w}">Semana del ${C.esc(C.fecha(w))}</option>`).join("")}</select></label>
+        <p class="muted" style="margin:0">Cada día del plan se rellena con los ejercicios de ese día y sus series hechas.</p>` : `<p class="muted" style="margin:0">No hay sesiones registradas.</p>`; })() : ""}
+    <div class="btn-row"><button class="btn sm primary" type="submit">${boton}</button><button class="btn sm" type="button" data-e="pl-cancelar">Cancelar</button></div></form>`;
+  const cab = `<div class="card"><p class="card-title">Planes de semana</p>
+    ${l.length ? `<div class="chips">${l.map(x => `<button class="chip" data-e="pl-ver" data-id="${x.id}" aria-pressed="${p && x.id === p.id}">${x.id === activo ? "★ " : ""}${C.esc(x.nombre)}</button>`).join("")}</div>` : `<p class="muted" style="margin:0">Aún no tienes planes. Crea uno vacío o a partir de una semana que ya hiciste.</p>`}
+    ${acc === "nuevo" ? formNombre("Nombre del plan nuevo", "", "Crear")
+      : acc === "historial" ? formNombre("Nombre del plan", "", "Crear desde esa semana")
+      : acc === "renombrar" && p ? formNombre("Nombre", p.nombre, "Guardar")
+      : acc === "duplicar" && p ? formNombre("Nombre de la copia", `${p.nombre} (copia)`, "Duplicar")
+      : acc === "borrar" && p ? `<div class="item confirm"><span>¿Borrar el plan «${C.esc(p.nombre)}»? No afecta a tus sesiones registradas.</span><span class="btn-row"><button class="btn sm danger" data-e="pl-borrar">Borrar</button><button class="btn sm" data-e="pl-cancelar">Cancelar</button></span></div>`
+      : `<div class="btn-row">
+          <button class="btn sm" data-e="pl-accion" data-v="nuevo">${C.icon("mas", 16)}Nuevo</button>
+          <button class="btn sm" data-e="pl-accion" data-v="historial">${C.icon("copiar", 16)}Desde el historial</button>
+          ${p ? `<button class="btn sm" data-e="pl-accion" data-v="duplicar">Duplicar</button>
+          <button class="btn sm" data-e="pl-accion" data-v="renombrar">${C.icon("lapiz", 16)}Renombrar</button>
+          ${p.id !== activo ? `<button class="btn sm" data-e="pl-activo">★ Marcar como activo</button>` : ""}
+          <button class="btn sm danger" data-e="pl-accion" data-v="borrar">${C.icon("papelera", 16)}Borrar</button>` : ""}</div>`}
+    ${p ? `<p class="muted" style="margin:0">${p.id === activo ? "★ Plan activo: es el que se usará para aplicar sesiones a un día." : "Este plan no es el activo."}</p>` : ""}</div>`;
+  if (!p) return cab;
+  const mapa = PL.porId(C.S.ejercicios), semana = PL.seriesPlan(p, mapa);
+  const diasCon = p.dias.filter(d => d.ejercicios.length).length, total = p.dias.reduce((a, d) => a + PL.seriesTotales(d), 0);
+  const vol = `<div class="card" data-sec="pl-vol"><p class="card-title">Volumen de la semana · ${C.esc(p.nombre)}</p>
+    ${total ? `<div class="grid3"><div class="stat"><b>${diasCon}</b><span>días de entreno</span></div><div class="stat"><b>${total}</b><span>series</span></div><div class="stat"><b>${7 - diasCon}</b><span>descanso</span></div></div>
+      ${bloqueRangos(semana)}
+      <p class="muted" style="margin:0">Series planificadas frente a tus rangos, con la misma nota que la pestaña Volumen (cada serie cuenta entera en cada grupo del ejercicio).</p>`
+    : `<p class="muted" style="margin:0">Añade ejercicios a los días para ver el volumen.</p>`}</div>`;
+  const dias = p.dias.map((d, i) => {
+    const row = PL.seriesDia(d, mapa), n = PL.seriesTotales(d);
+    return `<div class="card" data-sec="pl-d${i}"><p class="card-title">${PL.DIAS_PLAN[i]}${d.nombre ? ` · ${C.esc(d.nombre)}` : ""}${n ? ` · ${n} series` : d.ejercicios.length ? "" : " · descanso"}</p>
+      <label class="campo">Nombre de la sesión (opcional)<input id="pl-dn-${i}" data-pldn="${i}" maxlength="30" value="${C.esc(d.nombre)}" placeholder="p. ej. Torso A" autocomplete="off"></label>
+      ${d.ejercicios.length ? d.ejercicios.map((x, k) => {
+        const e = mapa[x.ejercicioId];
+        return `<div class="item franja plan-ej" style="${e ? franja(e.grupos) : ""}">
+          <span class="item-main"><b>${e ? C.esc(e.nombre) : "Ejercicio eliminado"}</b>
+            <span class="tags">${e ? Object.keys(e.grupos || {}).map(tag).join("") : ""}${e && e.unilateral ? `<span class="tag line">×2</span>` : ""}</span></span>
+          <span class="paso">
+            <button class="icon-btn sm" data-e="pl-serie" data-d="${i}" data-k="${k}" data-n="-1" ${x.series <= 1 ? "disabled" : ""} aria-label="Una serie menos">−</button>
+            <b class="mono" aria-label="Series">${x.series}</b>
+            <button class="icon-btn sm" data-e="pl-serie" data-d="${i}" data-k="${k}" data-n="1" ${x.series >= PL.SERIES_MAX ? "disabled" : ""} aria-label="Una serie más">+</button></span>
+          <span class="plan-mover">
+            <button class="icon-btn sm" data-e="pl-mover" data-d="${i}" data-k="${k}" data-n="-1" ${k === 0 ? "disabled" : ""} aria-label="Subir">${C.icon("arriba", 16)}</button>
+            <button class="icon-btn sm" data-e="pl-mover" data-d="${i}" data-k="${k}" data-n="1" ${k === d.ejercicios.length - 1 ? "disabled" : ""} aria-label="Bajar">${C.icon("abajo", 16)}</button>
+            <button class="icon-btn sm danger" data-e="pl-quitar" data-d="${i}" data-k="${k}" aria-label="Quitar del día">${C.icon("cerrar", 16)}</button></span>
+        </div>`; }).join("") + chipsGrupos(row) : `<p class="muted" style="margin:0">Descanso: sin ejercicios.</p>`}
+      ${E.planPicker === i ? vPicker() : ""}
+      ${E.copiarDia === i ? `<div class="sub-label">Copiar el ${PL.DIAS_PLAN[i].toLowerCase()} a…</div>
+        <div class="chips">${PL.DIAS_PLAN.map((nd, j) => j === i ? "" : `<button class="chip" data-e="pl-copiar-a" data-d="${i}" data-a="${j}">${nd}${p.dias[j].ejercicios.length ? " ·" : ""}</button>`).join("")}</div>
+        <p class="muted" style="margin:0">Sustituye lo que tenga ese día (los marcados con «·» tienen ejercicios). <button class="btn sm" data-e="pl-copiar" data-d="${i}">Cancelar</button></p>` : ""}
+      ${E.planPicker === i ? "" : `<div class="btn-row"><button class="btn sm" data-e="pl-anadir" data-d="${i}">${C.icon("mas", 16)}Ejercicio</button>${d.ejercicios.length ? `<button class="btn sm" data-e="pl-copiar" data-d="${i}">${C.icon("copiar", 16)}Copiar a otro día</button>` : ""}</div>`}
+    </div>`;
+  }).join("");
+  return cab + vol + dias;
+}
+
+/* ---------- ejercicios (catálogo) ---------- */
+function vEjercicios() {
+  const q = E.ejQ.toLowerCase(), pls = planes();
+  const presentes = GRUPOS.filter(g => C.S.ejercicios.some(e => grupoPrincipal(e) === g));
+  const lista = C.S.ejercicios.filter(e => (!E.ejGrupo || Object.keys(e.grupos || {}).includes(E.ejGrupo)) && (e.nombre.toLowerCase().includes(q) || Object.keys(e.grupos || {}).some(g => g.toLowerCase().includes(q))))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+  const porGrupo = {};
+  lista.forEach(e => (porGrupo[grupoPrincipal(e)] = porGrupo[grupoPrincipal(e)] || []).push(e));
+  const orden = [...GRUPOS, "Otros"].filter(g => porGrupo[g]);
+  const meta = e => { const u = PL.usoEjercicio(C.S.sesiones, e.id), np = PL.planesCon(pls, e.id).length;
+    return `<span class="muted">${u.sesiones ? `${u.sesiones} ${u.sesiones === 1 ? "sesión" : "sesiones"} · última ${C.esc(C.fecha(u.ultima))}` : "sin usar todavía"}${np ? ` · en ${np} ${np === 1 ? "plan" : "planes"}` : ""}</span>`; };
+  return `<div class="card"><p class="card-title">Catálogo de ejercicios · ${C.S.ejercicios.length}</p>
+    <input class="buscar" id="ej-buscar" placeholder="Buscar por nombre o grupo" value="${C.esc(E.ejQ)}" autocomplete="off" aria-label="Buscar en el catálogo">
+    <div class="chips"><button class="chip" data-e="ej-grupo" data-v="" aria-pressed="${!E.ejGrupo}">Todos</button>${presentes.map(g => `<button class="chip" data-e="ej-grupo" data-v="${C.esc(g)}" aria-pressed="${E.ejGrupo === g}"><i class="dot" style="background:${colorDe(g)}"></i>${C.esc(g)}</button>`).join("")}</div>
+    ${E.creando || E.editandoEj || E.pendEdit ? "" : `<div class="btn-row"><button class="btn" data-e="crear">${C.icon("mas", 16)}Crear ejercicio</button></div>`}
+    <p class="muted" style="margin:0">Toca un ejercicio para ver su progresión. Editar cambia el catálogo; si ya lo has usado, te preguntará si aplicarlo también al historial.</p></div>
+  ${E.creando || E.editandoEj || E.pendEdit ? formEjercicio() : ""}
+  ${orden.map(g => `<div class="card" data-sec="ej-${C.esc(g)}"><p class="card-title">${C.esc(g)} · ${porGrupo[g].length}</p>
+    <div class="items">${porGrupo[g].map(e => filaCatalogo(e, "ver-prog", meta(e))).join("")}</div></div>`).join("") || `<div class="card vacio"><p>Sin coincidencias.</p></div>`}`;
 }
 
 /* ---------- progresión ---------- */
@@ -433,10 +565,6 @@ function vVolumen() {
   if (!E.semana || !semanas.includes(E.semana)) E.semana = semanas[semanas.length - 1];
   const idx = semanas.indexOf(E.semana), row = porSem[E.semana];
   const activos = GRUPOS.filter(g => semanas.some(w => porSem[w][g]));
-  const rangos = C.S.ajustes.entreno.rangos || {};
-  const nota = notaSemana(row);
-  const tier = nota === null ? null : nota >= 85 ? ["Semana muy completa", "var(--acc)"] : nota >= 70 ? ["Semana correcta", "var(--text)"] : nota >= 50 ? ["Mejorable", "var(--warn)"] : ["Semana floja", "var(--bad)"];
-  const filas = GRUPOS.filter(g => (row[g] || 0) > 0 || (rangos[g] && !OPCIONALES.has(g)));
   return selectorRango("vol", E.volRango) + `
   <div class="card"><p class="card-title">Series semanales por grupo</p>${grafBarras(semanas, porSem, activos)}</div>
   <div class="card">
@@ -446,7 +574,17 @@ function vVolumen() {
         <span class="muted">Del ${C.esc(C.fecha(E.semana))}${idx === semanas.length - 1 ? " · última" : ""}</span></div>
       <button class="icon-btn sm" data-sem="1" ${idx === semanas.length - 1 ? "disabled" : ""} aria-label="Semana siguiente">${C.icon("der", 18)}</button>
     </div>
-    ${tier ? `<div class="nota"><span class="mono" style="color:${tier[1]}">${nota}<small>/100</small></span><span style="color:${tier[1]}">${tier[0]}</span></div>` : ""}
+    ${bloqueRangos(row)}
+    <p class="muted" style="margin:0">La franja clara es tu rango (desde–hasta). Dentro del rango, 100; por debajo, proporcional a las series hechas; por encima, se resta lo que te pasas (mínimo 50). Los grupos sin rango no cuentan; hombro anterior, core y antebrazo solo cuentan si los entrenas. Los rangos se editan en Ajustes.</p>
+  </div>`;
+}
+/* Nota de la semana y una fila por grupo frente a su rango (Volumen y Planificar) */
+function bloqueRangos(row) {
+  const rangos = C.S.ajustes.entreno.rangos || {};
+  const nota = notaSemana(row);
+  const tier = nota === null ? null : nota >= 85 ? ["Semana muy completa", "var(--acc)"] : nota >= 70 ? ["Semana correcta", "var(--text)"] : nota >= 50 ? ["Mejorable", "var(--warn)"] : ["Semana floja", "var(--bad)"];
+  const filas = GRUPOS.filter(g => (row[g] || 0) > 0 || (rangos[g] && !OPCIONALES.has(g)));
+  return `${tier ? `<div class="nota"><span class="mono" style="color:${tier[1]}">${nota}<small>/100</small></span><span style="color:${tier[1]}">${tier[0]}</span></div>` : ""}
     ${filas.map(g => {
       const sets = row[g] || 0, lm = rangos[g], st = estadoVolumen(sets, lm);
       const escala = Math.max(lm ? lm.max * 1.3 : 20, sets) * 1.05, pc = v => Math.min(100, v / escala * 100);
@@ -454,9 +592,7 @@ function vVolumen() {
         <div class="vol-top"><span class="g-nombre"><i class="dot" style="background:${colorDe(g)}"></i>${C.esc(g)}</span><span style="color:${st.col}"><b>${C.nf(sets, sets % 1 ? 1 : 0)}</b> ${lm ? `<span class="muted">/ ${lm.min}–${lm.max}</span>` : ""}</span></div>
         <div class="vol-bar">${lm ? `<i class="vol-rango" style="left:${pc(lm.min)}%;width:${pc(lm.max) - pc(lm.min)}%"></i>` : ""}<i class="vol-fill" style="width:${pc(sets)}%;background:${st.col}"></i></div>
         <div class="vol-txt" style="color:${st.col}">${st.marca ? st.marca + " " : ""}${st.txt}</div></div>`;
-    }).join("")}
-    <p class="muted" style="margin:0">La franja clara es tu rango (desde–hasta). Dentro del rango, 100; por debajo, proporcional a las series hechas; por encima, se resta lo que te pasas (mínimo 50). Los grupos sin rango no cuentan; hombro anterior, core y antebrazo solo cuentan si los entrenas. Los rangos se editan en Ajustes.</p>
-  </div>`;
+    }).join("")}`;
 }
 function grafBarras(semanas, porSem, activos) {
   const W = 480, H = 250, L = 30, R = 6, T = 10, B = 28;
@@ -559,10 +695,32 @@ function guardarAjustesEntreno(form) {
   C.toast("Ajustes de entreno guardados."); C.render();
 }
 
+/* ---------- ayudas del catálogo y del plan ---------- */
+function verFormulario() { setTimeout(() => { const f = document.getElementById("form-ej"); if (f) f.scrollIntoView({ block: "start", behavior: "smooth" }); }, 30); }
+function anadirAlPlan(ejId) {
+  const p = planSel(), d = E.planPicker; if (!p || d == null) return;
+  p.dias[d].ejercicios.push({ ejercicioId: ejId, series: PL.SERIES_POR_DEFECTO });
+  guardarPlan(p);
+  E.planPicker = null; E.q = "";
+  C.toast(`Añadido al ${PL.DIAS_PLAN[d].toLowerCase()} con ${PL.SERIES_POR_DEFECTO} series.`);
+}
+/* Guarda la edición de un ejercicio; con «historial», también en las sesiones ya registradas */
+function aplicarEdicion(p, historial) {
+  const ej = ejercicioDe(p.id); if (!ej) return;
+  Object.assign(ej, { nombre: p.nombre, grupos: p.grupos, unilateral: p.unilateral });
+  C.DB.guardarDoc(C.S.user.uid, "ejercicios", ej.id, limpia(ej)).catch(err => C.toast(C.mensajeError(err), 5000));
+  if (!historial) { C.toast("Ejercicio actualizado. El historial se queda como se registró."); return; }
+  guardarYa();
+  const cambiadas = PL.aplicarAlHistorial(C.S.sesiones, ej.id, p);
+  C.DB.guardarVarios(C.S.user.uid, "sesiones", cambiadas.map(s => [s.fecha, limpia(s)]))
+    .then(() => C.toast(`Ejercicio actualizado en el catálogo y en ${cambiadas.length} ${cambiadas.length === 1 ? "sesión" : "sesiones"}.`))
+    .catch(err => C.toast("No se pudo actualizar el historial: " + C.mensajeError(err), 6000));
+}
+
 /* ---------- eventos ---------- */
 export function click(e) {
   const t = e.target;
-  const sub = t.closest("[data-esub]"); if (sub) { E.sub = sub.dataset.esub; C.render(); return true; }
+  const sub = t.closest("[data-esub]"); if (sub) { guardarYa(); E.sub = sub.dataset.esub; cerrarFormularios(); C.render(); return true; }
   const rg = t.closest("[data-rango]");
   if (rg) { const [w, v] = rg.dataset.rango.split(":"); if (w === "prog") { E.progRango = v; E.punto = null; } else { E.volRango = v; E.semana = null; } C.render(); return true; }
   const pt = t.closest("[data-punto]"); if (pt) { E.punto = +pt.dataset.punto; C.render(); return true; }
@@ -581,18 +739,68 @@ export function click(e) {
   const act = b.dataset.e, i = +b.dataset.i, j = +b.dataset.j;
   switch (act) {
     case "picker": E.picker = true; E.q = ""; E.creando = false; E.editandoEj = null; break;
-    case "picker-cerrar": E.picker = false; E.confirmEj = null; break;
-    case "crear": E.creando = true; break;
-    case "form-cancelar": E.creando = false; E.editandoEj = null; break;
-    case "editar-ej": E.editandoEj = b.dataset.id; E.confirmEj = null; break;
+    case "picker-cerrar": E.picker = false; E.planPicker = null; E.confirmEj = null; E.creando = false; E.editandoEj = null; E.pendEdit = null; break;
+    case "crear": E.creando = true; E.editandoEj = null; E.pendEdit = null; E.confirmEj = null; if (E.sub === "ejercicios") verFormulario(); break;
+    case "form-cancelar": E.creando = false; E.editandoEj = null; E.pendEdit = null; break;
+    case "editar-ej": E.editandoEj = b.dataset.id; E.creando = false; E.confirmEj = null; E.pendEdit = null; if (E.sub === "ejercicios") verFormulario(); break;
+    case "edit-nuevo": case "edit-historial": {
+      const p = E.pendEdit; if (!p) break;
+      aplicarEdicion(p, act === "edit-historial"); E.pendEdit = null; E.editandoEj = null; break;
+    }
+    case "edit-cancelar": E.pendEdit = null; break;
+    case "ej-grupo": E.ejGrupo = b.dataset.v || null; break;
+    case "ver-prog": {
+      const id = b.dataset.id;
+      const fechas = sesiones().filter(x => x.ejercicios.some(e => e.ejercicioId === id && e.series.some(completa))).map(x => x.fecha);
+      if (!fechas.length) { C.toast("Aún no hay series registradas de ese ejercicio."); return true; }
+      const desde = haceMeses(RANGOS[E.progRango]);
+      if (desde && !fechas.some(f => f >= desde)) E.progRango = "all";
+      E.progEj = id; E.punto = null; E.sub = "progresion"; cerrarFormularios(); window.scrollTo(0, 0); break;
+    }
+    /* ---- planificador ---- */
+    case "pl-ver": E.plan = b.dataset.id; E.planAccion = null; E.planPicker = null; E.copiarDia = null; break;
+    case "pl-accion": E.planAccion = b.dataset.v; E.planPicker = null; E.copiarDia = null; break;
+    case "pl-cancelar": E.planAccion = null; break;
+    case "pl-activo": { const p = planSel(); if (p) { marcarActivo(p.id); C.toast(`«${p.nombre}» es ahora el plan activo.`); } break; }
+    case "pl-borrar": {
+      const p = planSel(); if (!p) break;
+      C.S.planes = C.S.planes.filter(x => x.id !== p.id);
+      C.DB.borrarDoc(C.S.user.uid, "planes", p.id).catch(err => C.toast(C.mensajeError(err), 5000));
+      if (planActivo() === p.id) { const resto = planes(); marcarActivo(resto.length ? resto[0].id : null); }
+      E.plan = null; E.planAccion = null; C.toast("Plan borrado."); break;
+    }
+    case "pl-anadir": E.planPicker = +b.dataset.d; E.q = ""; E.copiarDia = null; E.creando = false; E.editandoEj = null; E.pendEdit = null; E.confirmEj = null; break;
+    case "pl-serie": case "pl-mover": case "pl-quitar": {
+      const p = planSel(); if (!p) break;
+      const d = p.dias[+b.dataset.d], k = +b.dataset.k, x = d && d.ejercicios[k]; if (!x) break;
+      if (act === "pl-serie") x.series = Math.min(PL.SERIES_MAX, Math.max(1, x.series + (+b.dataset.n)));
+      else if (act === "pl-mover") { const k2 = k + (+b.dataset.n); if (k2 < 0 || k2 >= d.ejercicios.length) break; [d.ejercicios[k], d.ejercicios[k2]] = [d.ejercicios[k2], d.ejercicios[k]]; }
+      else d.ejercicios.splice(k, 1);
+      guardarPlan(p); break;
+    }
+    case "pl-copiar": { const d = +b.dataset.d; E.copiarDia = E.copiarDia === d ? null : d; E.planPicker = null; break; }
+    case "pl-copiar-a": {
+      const p = planSel(); if (!p) break;
+      const de = +b.dataset.d, a = +b.dataset.a;
+      const hacer = () => { const q = planSel(); if (!q) return; PL.copiarDia(q, de, a); guardarPlan(q); E.copiarDia = null; C.toast(`${PL.DIAS_PLAN[de]} copiado al ${PL.DIAS_PLAN[a].toLowerCase()}.`); C.render(); };
+      if (p.dias[a].ejercicios.length) {
+        C.confirmar(`Sustituir el ${PL.DIAS_PLAN[a].toLowerCase()}`, `El ${PL.DIAS_PLAN[a].toLowerCase()} tiene ${p.dias[a].ejercicios.length} ejercicios. Se sustituirán por los del ${PL.DIAS_PLAN[de].toLowerCase()} (nombre de la sesión incluido).`, "Sustituir", hacer);
+        return true;
+      }
+      hacer(); return true;
+    }
     case "pedir-borrar-ej": E.confirmEj = b.dataset.id; break;
     case "no-borrar-ej": E.confirmEj = null; break;
-    case "borrar-ej":
-      C.S.ejercicios = C.S.ejercicios.filter(x => x.id !== b.dataset.id);
-      C.DB.borrarDoc(C.S.user.uid, "ejercicios", b.dataset.id).catch(err => C.toast(C.mensajeError(err), 5000));
-      E.confirmEj = null; C.toast("Ejercicio eliminado del catálogo."); break;
+    case "borrar-ej": {
+      const id = b.dataset.id;
+      C.S.ejercicios = C.S.ejercicios.filter(x => x.id !== id);
+      C.DB.borrarDoc(C.S.user.uid, "ejercicios", id).catch(err => C.toast(C.mensajeError(err), 5000));
+      const cambiados = PL.quitarDePlanes(planes(), id); cambiados.forEach(guardarPlan);
+      E.confirmEj = null; C.toast(`Ejercicio eliminado del catálogo${cambiados.length ? ` y de ${cambiados.length === 1 ? "1 plan" : `${cambiados.length} planes`}` : ""}.`); break;
+    }
     case "elegir": {
       const ej = ejercicioDe(b.dataset.id); if (!ej) break;
+      if (E.sub === "planificar" && E.planPicker != null) { anadirAlPlan(ej.id); break; }
       conSesion(s => s.ejercicios.push({ ejercicioId: ej.id, nombre: ej.nombre, grupos: { ...ej.grupos }, unilateral: !!ej.unilateral, series: [{ peso: null, reps: null }] }));
       E.picker = false; E.q = ""; break;
     }
@@ -650,6 +858,7 @@ export function click(e) {
 
 /* Al teclear: se actualiza la serie y el resumen sin repintar (para no perder el foco) */
 export function input(t) {
+  if (t.id === "ej-buscar") { E.ejQ = t.value; const pos = t.selectionStart; C.render(); const n = document.getElementById("ej-buscar"); if (n) { n.focus(); n.setSelectionRange(pos, pos); } return true; }
   if (t.id === "e-buscar") { E.q = t.value; const pos = t.selectionStart; C.render(); const n = document.getElementById("e-buscar"); if (n) { n.focus(); n.setSelectionRange(pos, pos); } return true; }
   if (!t.dataset.set) return false;
   const [i, j, campo] = t.dataset.set.split(":");
@@ -665,6 +874,10 @@ export function input(t) {
 /* Al terminar de escribir un campo: guarda, comprueba récord y arranca el descanso */
 const yaDescansado = new Set();
 export function change(t) {
+  if (t.dataset && t.dataset.pldn != null) {
+    const p = planSel(); if (!p) return true;
+    p.dias[+t.dataset.pldn].nombre = t.value.trim().slice(0, 30); guardarPlan(p); C.render(); return true;
+  }
   if (t.id === "e-fecha") { guardarYa(); E.fecha = t.value || hoyISO(); E.picker = false; E.copiando = false; C.render(); return true; }
   if (!t.dataset.set) return false;
   const [i, j] = t.dataset.set.split(":").map(Number);
@@ -705,24 +918,56 @@ function marcarFila(t, s, i, j) {
   }
 }
 
+/* Formulario de planes: nuevo, desde el historial, renombrar o duplicar */
+function enviarPlan(form) {
+  const f = new FormData(form), nombre = String(f.get("nombre") || "").trim().replace(/\s+/g, " ").slice(0, 40);
+  if (!nombre) return;
+  const acc = E.planAccion, p = planSel(), ahora = new Date().toISOString();
+  let nuevo = null;
+  if (acc === "nuevo") nuevo = PL.planVacio(uid(), nombre, ahora);
+  else if (acc === "historial") {
+    const sem = f.get("semana"); if (!sem) { C.toast("No hay sesiones registradas."); return; }
+    guardarYa();
+    const r = PL.planDesdeSemana(sem, sesiones(), PL.porId(C.S.ejercicios), uid(), nombre, ahora);
+    nuevo = r.plan;
+    if (r.omitidos) C.toast(`${r.omitidos} ejercicio(s) de esa semana ya no están en el catálogo y no se han incluido.`, 6000);
+  } else if (acc === "duplicar" && p) nuevo = PL.duplicarPlan(p, uid(), nombre, ahora);
+  else if (acc === "renombrar" && p) { p.nombre = nombre; guardarPlan(p); E.planAccion = null; C.toast("Plan renombrado."); C.render(); return; }
+  if (!nuevo) return;
+  guardarPlan(nuevo);
+  if (!planActivo() || !planes().some(x => x.id === planActivo())) marcarActivo(nuevo.id);
+  E.plan = nuevo.id; E.planAccion = null;
+  C.toast(acc === "duplicar" ? "Plan duplicado." : "Plan creado.");
+  C.render();
+}
 export function submit(form) {
   if (form.id === "aj-entreno") { guardarAjustesEntreno(form); return true; }
+  if (form.id === "pl-form") { enviarPlan(form); return true; }
   if (form.id !== "form-ej") return false;
   const f = new FormData(form);
-  const nombre = String(f.get("nombre") || "").trim(); if (!nombre) return true;
+  const nombre = String(f.get("nombre") || "").trim().replace(/\s+/g, " "); if (!nombre) return true;
   const gs = f.getAll("g"); if (!gs.length) { C.toast("Marca al menos un grupo muscular."); return true; }
-  const grupos = Object.fromEntries(gs.map(g => [g, 1]));
+  const grupos = Object.fromEntries(GRUPOS.filter(g => gs.includes(g)).map(g => [g, 1]));
   const uni = !!f.get("uni");
+  const repetido = C.S.ejercicios.find(x => x.id !== E.editandoEj && x.nombre.trim().toLowerCase() === nombre.toLowerCase());
+  if (repetido) { C.toast(`Ya existe un ejercicio llamado «${repetido.nombre}».`); return true; }
   if (E.editandoEj) {
-    const ej = ejercicioDe(E.editandoEj);
-    Object.assign(ej, { nombre, grupos, unilateral: uni });
-    C.DB.guardarDoc(C.S.user.uid, "ejercicios", ej.id, ej).catch(err => C.toast(C.mensajeError(err), 5000));
-    E.editandoEj = null; C.toast("Ejercicio actualizado. Las sesiones nuevas usarán estos grupos.");
+    const ej = ejercicioDe(E.editandoEj); if (!ej) { E.editandoEj = null; C.render(); return true; }
+    // Los grupos que ya tenía conservan su peso (p. ej. un reparto distinto de 1)
+    Object.keys(grupos).forEach(g => { if (ej.grupos && ej.grupos[g] != null) grupos[g] = ej.grupos[g]; });
+    const cambia = nombre !== ej.nombre || uni !== !!ej.unilateral || JSON.stringify(Object.keys(grupos).sort()) !== JSON.stringify(Object.keys(ej.grupos || {}).sort());
+    if (!cambia) { E.editandoEj = null; C.toast("Sin cambios."); C.render(); return true; }
+    const n = PL.usoEjercicio(sesiones(), ej.id).sesiones;
+    const datos = { id: ej.id, nombre, grupos, unilateral: uni, n };
+    if (n) E.pendEdit = datos;            // ya usado: se pregunta si aplicar al historial
+    else { aplicarEdicion(datos, false); E.editandoEj = null; }
   } else {
     const ej = { id: uid(), nombre, grupos, unilateral: uni };
     C.S.ejercicios.push(ej);
     C.DB.guardarDoc(C.S.user.uid, "ejercicios", ej.id, ej).catch(err => C.toast(C.mensajeError(err), 5000));
-    conSesion(s => s.ejercicios.push({ ejercicioId: ej.id, nombre, grupos: { ...grupos }, unilateral: uni, series: [{ peso: null, reps: null }] }));
+    if (E.sub === "planificar" && E.planPicker != null) anadirAlPlan(ej.id);
+    else if (E.sub === "registrar") conSesion(s => s.ejercicios.push({ ejercicioId: ej.id, nombre, grupos: { ...grupos }, unilateral: uni, series: [{ peso: null, reps: null }] }));
+    else C.toast(`«${nombre}» añadido al catálogo.`);
     E.creando = false; E.picker = false; E.q = "";
   }
   C.render();

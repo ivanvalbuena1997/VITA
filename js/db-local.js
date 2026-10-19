@@ -37,5 +37,6 @@ export async function actualizarDoc(uid, col, id, campos) {
   Object.entries(JSON.parse(JSON.stringify(campos))).forEach(([k, v]) => { if (v === null) delete d[k]; else d[k] = v; });
   mem[col].set(String(id), d); setTimeout(emitir, 0);
 }
+export async function guardarVarios(uid, col, docs) { docs.forEach(([id, d]) => mem[col].set(String(id), JSON.parse(JSON.stringify(d)))); setTimeout(emitir, 0); }
 export async function borrarDoc(uid, col, id) { mem[col].delete(String(id)); setTimeout(emitir, 0); }
 export async function borrarVarios(uid, col, ids) { ids.forEach(id => mem[col].delete(String(id))); setTimeout(emitir, 0); }

@@ -22,7 +22,7 @@ const DB = MODO_LOCAL ? await import("./db-local.js") : await import("./db.js");
 
 const S = {
   user: null, ajustes: null, compra: null,
-  ejercicios: [], sesiones: [], dias: [], alimentos: [], menus: [], diario: [],
+  ejercicios: [], sesiones: [], dias: [], alimentos: [], menus: [], diario: [], planes: [], errorPlanes: null,
   pendiente: {}, online: navigator.onLine,
   tab: "hoy", importacion: null, persistente: null, cargado: false
 };
@@ -67,7 +67,8 @@ function toast(msg, ms = 2600, tipo = "") {
 
 /* ---------- cálculos que usa la portada ---------- */
 const pesoDeCalculo = () => pesoEn(S.dias, S.ajustes.perfil, hoyISO());
-const hayDatos = () => S.sesiones.length + S.diario.length + S.dias.length + S.alimentos.length > 0;
+// Los alimentos base («base-…») los añade la app sola: no cuentan como datos tuyos
+const hayDatos = () => S.sesiones.length + S.diario.length + S.dias.length + S.alimentos.filter(a => !String(a.id).startsWith("base-")).length + (S.planes || []).length > 0;
 function copiaPendiente() {
   if (!hayDatos()) return false;
   const u = S.ajustes.app.ultimaCopia;
@@ -270,7 +271,7 @@ function vHoy() {
       <div class="btn-row" style="margin-top:8px"><button class="btn" data-tab="ajustes">Completar en Ajustes</button></div></div></div>`);
   if (!hayDatos()) {
     out.push(`<div class="card accent"><p class="card-title">Empieza aquí</p>
-      <p style="margin:0">Todavía no hay datos. Ve a <b>Ajustes → Importar copias</b> y elige los archivos de GYM-TRACKER y de FitCoock.</p>
+      <p style="margin:0">Todavía no hay datos. Empieza a apuntar o restaura una copia de V.I.T.A. en <b>Ajustes → Datos y copias</b>.</p>
       <div class="btn-row"><button class="btn primary" data-tab="ajustes">Ir a Ajustes</button></div></div>`);
     return out.join("");
   }
@@ -319,10 +320,10 @@ function vAjustes() {
     <div class="row"><span>Última copia descargada</span><span>${a.app.ultimaCopia ? esc(fecha(a.app.ultimaCopia)) : "nunca"}</span></div>
     <div class="btn-row">
       <button class="btn primary" data-act="copia">Descargar copia</button>
-      <label class="btn" for="archivos">Importar copias</label>
+      <label class="btn" for="archivos">Restaurar una copia</label>
     </div>
-    <input type="file" id="archivos" class="hide" accept=".json,application/json" multiple>
-    <p class="muted" style="margin:0">Puedes elegir a la vez las copias de GYM-TRACKER y de FitCoock, o una copia de V.I.T.A. para restaurarla.</p>
+    <input type="file" id="archivos" class="hide" accept=".json,application/json" ${MODO_LOCAL ? "multiple" : ""}>
+    <p class="muted" style="margin:0">Restaurar sustituye todo lo que hay en V.I.T.A. por lo de la copia. Antes se descarga sola una copia de lo actual. La importación de GYM-TRACKER y FitCoock está desactivada: V.I.T.A. ya es tu app principal.</p>
     ${imp ? vistaImportacion(imp) : ""}
   </div>
   <p class="muted" style="text-align:center">V.I.T.A. v${APP_VERSION}${MODO_LOCAL ? " · modo local" : ""}</p>`;
@@ -341,10 +342,12 @@ function vistaImportacion(imp) {
       <div class="stat"><b>${d.alimentos.length - platos} · ${platos}</b><span>productos · platos</span></div>
       <div class="stat"><b>${d.diario.length}</b><span>días de diario</span></div>
       <div class="stat"><b>${d.menus.length}</b><span>menús</span></div>
+      ${d.planes ? `<div class="stat"><b>${d.planes.length}</b><span>planes de semana</span></div>` : ""}
     </div>
     ${(imp.avisos || []).length ? `<ul class="list">${imp.avisos.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
-    ${hayDatos() ? `<div class="notice">${icon("aviso", 20, "var(--warn)")}<span>Sustituye todos los datos que hay ahora en V.I.T.A. (en el móvil y en el ordenador). Descarga antes una copia si tienes algo nuevo.</span></div>` : ""}
-    <div class="btn-row"><button class="btn primary" data-act="importar">Importar</button><button class="btn" data-act="cancelar-imp">Cancelar</button></div>
+    ${hayDatos() ? `<div class="notice">${icon("aviso", 20, "var(--warn)")}<span>Sustituye <b>todos</b> los datos que hay ahora en V.I.T.A., en el móvil y en el ordenador. Antes de hacerlo se descargará sola una copia de lo actual.${d.planes ? "" : " Esta copia es anterior a los planes de semana: los tuyos se conservan."}</span></div>
+      <label class="campo">Para confirmar, escribe SUSTITUIR<input id="imp-conf" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>` : ""}
+    <div class="btn-row"><button class="btn primary" data-act="importar" ${hayDatos() ? "disabled" : ""}>${imp.tipo === "vita" ? "Restaurar" : "Importar"}</button><button class="btn" data-act="cancelar-imp">Cancelar</button></div>
   </div>`;
 }
 
@@ -357,6 +360,8 @@ async function leerArchivos(files) {
   if (vita) {
     S.importacion = { tipo: "vita", datos: vita.datos, avisos: [`Copia del ${vita.exportado.slice(0, 10)} (v${vita.version_app}).`] };
   } else {
+    // Desde la 0.6.1 V.I.T.A. es la app principal: las apps antiguas solo se importan en el modo de pruebas
+    if (!MODO_LOCAL) throw new Error("Solo se pueden restaurar copias de V.I.T.A. La importación de GYM-TRACKER y FitCoock está desactivada para no sustituir lo que apuntas ahora.");
     const gym = leidos.find(j => j && j.app === "gym-tracker");
     const fit = leidos.find(j => j && j.app === "FitCoock");
     if (!gym && !fit) throw new Error("No reconozco esos archivos: elige copias de GYM-TRACKER, FitCoock o V.I.T.A.");
@@ -370,6 +375,14 @@ async function leerArchivos(files) {
 
 async function importar() {
   const d = S.importacion.datos;
+  if (hayDatos()) {
+    const c = $("imp-conf");
+    if (!c || c.value.trim().toUpperCase() !== "SUSTITUIR") { toast("Escribe SUSTITUIR para confirmar."); return; }
+    EN.guardarYa();
+    descargar(crearCopia(S), `vita-copia-antes-de-restaurar-${hoyISO()}.json`);
+  }
+  // Copias anteriores a los planes, o planes no disponibles: los planes actuales no se tocan
+  if (!d.planes || S.errorPlanes) delete d.planes;
   // El tema y la fecha de la última copia son de este uso, no de la copia antigua
   d.ajustes.app = { ...d.ajustes.app, tema: temaActual(), ultimaCopia: S.ajustes.app.ultimaCopia };
   // Al importar las apps antiguas, lo que ya hayas rellenado en tu perfil manda
@@ -377,6 +390,7 @@ async function importar() {
     Object.entries(S.ajustes.perfil).forEach(([k, v]) => { if (v !== null && v !== undefined) d.ajustes.perfil[k] = v; });
   const existentes = {};
   ["ejercicios", "alimentos", "menus"].forEach(c => existentes[c] = S[c].map(x => x.id));
+  if (d.planes) existentes.planes = S.planes.map(x => x.id);
   ["sesiones", "dias", "diario"].forEach(c => existentes[c] = S[c].map(x => x.fecha));
   const { operaciones, confirmado } = DB.sustituirTodo(S.user.uid, d, existentes);
   S.importacion = null; render(true);
@@ -413,7 +427,10 @@ document.addEventListener("click", e => {
   if (act === "importar") importar();
   if (act === "cancelar-imp") { S.importacion = null; render(true); }
 });
-document.addEventListener("input", e => { if (S.cargado && !EN.input(e.target)) CO.input(e.target); });
+document.addEventListener("input", e => {
+  if (e.target.id === "imp-conf") { const b = document.querySelector('[data-act="importar"]'); if (b) b.disabled = e.target.value.trim().toUpperCase() !== "SUSTITUIR"; return; }
+  if (S.cargado && !EN.input(e.target)) CO.input(e.target);
+});
 document.addEventListener("change", e => {
   if (S.cargado && EN.change(e.target)) return;
   if (S.cargado && CO.change(e.target)) return;
@@ -455,7 +472,11 @@ async function arrancar() {
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().then(v => { S.persistente = v; }).catch(() => {});
     const recibidos = new Set(), delServidor = new Set();
     let baseHecha = false;
-    pararEscucha = DB.escuchar(user.uid, (nombre, valor, pendiente, desdeCache) => {
+    pararEscucha = DB.escuchar(user.uid, (nombre, valor, pendiente, desdeCache, error) => {
+      if (nombre === "planes") {   // colección nueva: no cuenta para «cargado» y, si falla, la app sigue
+        S.planes = valor || []; S.errorPlanes = error ? mensajeError(error) : null; S.pendiente.planes = pendiente;
+        if (S.cargado) render(); return;
+      }
       S.pendiente[nombre] = pendiente;
       if (!desdeCache) delServidor.add(nombre);
       if (nombre === "ajustes") {
@@ -521,7 +542,7 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http") && !MOD
   navigator.serviceWorker.addEventListener("controllerchange", () => { if (habiaControlador && !recargado) { recargado = true; location.reload(); } });
 }
 
-EN.init({ S, DB, render: () => render(true), toast, esc, nf, fecha, icon, mensajeError });
+EN.init({ S, DB, render: () => render(true), toast, esc, nf, fecha, icon, mensajeError, confirmar: (...a) => CO.confirmar(...a) });
 AC.init({ S, DB, render: () => render(true), toast, esc, nf, fecha, icon, mensajeError, confirmar: (...a) => CO.confirmar(...a), vSemana: () => RS.vSemana() });
 RS.init({ S, render: () => render(true), toast, esc, fecha, icon,
   irA: (tab, sub) => { if (tab === "progreso") AC.irHoy(sub); S.tab = tab; history.replaceState(null, "", "#" + tab); render(true); window.scrollTo(0, 0); } });

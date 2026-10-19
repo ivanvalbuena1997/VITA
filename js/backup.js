@@ -37,6 +37,7 @@ export const DOCUMENTACION = {
   secciones: {
     ajustes: "Perfil (sexo, nacimiento, altura, peso de referencia), objetivo diario de macros, preferencias de entreno, rangos de volumen, preferencias de la app.",
     ejercicios: "Catálogo de ejercicios: id, nombre, grupos {grupo: peso}, unilateral.",
+    planes: "Semanas planificadas (sin fechas): id, nombre, dias[7] de lunes a domingo { nombre, ejercicios[] { ejercicioId, series } }. Los grupos de cada ejercicio están en el catálogo. El plan activo es ajustes.entreno.planActivo.",
     sesiones: "Una por fecha. ejercicios[]: ejercicioId, nombre y grupos tal como estaban, unilateral, series[] {peso, reps, sugPeso?, sugReps?}.",
     dias: "Por fecha: pasos (+ pasosFuente: 'manual' o 'health-connect'), peso (pesaje de ese día, solo si se pesó), cardio[] (cinta: min, velocidad, inclinacion, km, pasosReloj, llevaba; bici: min, vatios, intensidad) y sueno { min dormido sin ratos despierto, inicio y fin (ISO, sesión principal), fases { profundo, ligero, rem, despierto } en min si las hay, sesiones, fuente }. sincronizado = última escritura de la app compañera.",
     sueno: "Cada noche va en el día en que te despiertas. Objetivo por defecto 7 h (AASM / Sleep Research Society, adultos). Lo puesto a mano (fuente 'manual') no lo sobrescribe la sincronización con Health Connect.",
@@ -75,6 +76,7 @@ export function crearCopia(S) {
       alimentos: S.alimentos,
       menus: S.menus,
       diario: S.diario.slice().sort((a, b) => a.fecha < b.fecha ? -1 : 1),
+      planes: S.planes || [],
       compra: S.compra
     }
   };
@@ -82,11 +84,11 @@ export function crearCopia(S) {
 
 export function esCopiaVita(j) { return !!(j && j.app === "vita" && j.datos && j.datos.ajustes); }
 
-export function descargar(json) {
+export function descargar(json, nombre = `vita-copia-${hoyISO()}.json`) {
   const blob = new Blob([JSON.stringify(json, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url; a.download = `vita-copia-${hoyISO()}.json`;
+  a.href = url; a.download = nombre;
   document.body.appendChild(a); a.click();
   setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
 }

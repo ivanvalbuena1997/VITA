@@ -8,7 +8,7 @@
      alimentos/{id}  · menus/{id}       · diario/{fecha}                     */
 
 import { firebaseConfig, FIREBASE_SDK } from "./config.js";
-import { COLECCIONES, CLAVE } from "./db-claves.js";
+import { COLECCIONES, CLAVE, OPCIONALES } from "./db-claves.js";
 export { COLECCIONES, CLAVE };
 
 let F = null;
@@ -69,7 +69,8 @@ export function escuchar(uid, onDatos, onError) {
     fs.onSnapshot(fs.doc(db, "users", uid, "compra", "actual"), opts,
       s => onDatos("compra", s.exists() ? s.data() : null, s.metadata.hasPendingWrites, s.metadata.fromCache), onError),
     ...COLECCIONES.map(c => fs.onSnapshot(fs.collection(db, "users", uid, c), opts,
-      s => onDatos(c, s.docs.map(d => d.data()), s.metadata.hasPendingWrites, s.metadata.fromCache), onError))
+      s => onDatos(c, s.docs.map(d => d.data()), s.metadata.hasPendingWrites, s.metadata.fromCache),
+      e => OPCIONALES.has(c) ? onDatos(c, [], false, false, e) : onError(e)))
   ];
   return () => subs.forEach(u => u());
 }
@@ -122,6 +123,16 @@ export function actualizarDoc(uid, col, id, campos) {
   if (Object.keys(quitar).length) b.set(r, quitar, { merge: true });
   b.set(r, datos, { merge: true });
   return b.commit();
+}
+/* Guarda varios documentos enteros (lotes de 400) */
+export function guardarVarios(uid, col, docs) {
+  const commits = [];
+  for (let i = 0; i < docs.length; i += 400) {
+    const b = F.fs.writeBatch(F.db);
+    docs.slice(i, i + 400).forEach(([id, datos]) => b.set(ref(uid, col, id), datos));
+    commits.push(b.commit());
+  }
+  return Promise.all(commits);
 }
 export function borrarVarios(uid, col, ids) {
   const commits = [];
