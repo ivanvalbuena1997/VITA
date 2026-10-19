@@ -18,12 +18,15 @@ const E = {
   volRango: "6m", semana: null, anios: new Set([String(new Date().getFullYear())]),
   meses: new Set([hoyISO().slice(0, 7)]), abierta: null, confirmBorrar: null, confirmTodo: false,
   // planificador y catálogo
-  plan: null, planPicker: null, planAccion: null, copiarDia: null, ejQ: "", ejGrupo: null, pendEdit: null
+  plan: null, planPicker: null, planAccion: null, copiarDia: null, ejQ: "", ejGrupo: null, pendEdit: null,
+  // aplicar el plan en Registrar: plan y día elegidos (null = activo / el día de la semana de la fecha)
+  apPlan: null, apDia: null, aplicando: false
 };
 /* Al cambiar de pestaña se cierran los formularios a medias */
 function cerrarFormularios() {
   E.picker = false; E.planPicker = null; E.creando = false; E.editandoEj = null; E.confirmEj = null;
   E.pendEdit = null; E.planAccion = null; E.copiarDia = null; E.q = "";
+  E.aplicando = false; E.apPlan = null; E.apDia = null;
 }
 
 /* ---------- utilidades ---------- */
@@ -225,14 +228,17 @@ function vRegistrar() {
       <div class="stat"><b>${hechas}<small>/${total}</small></b><span>series</span></div>
       <div class="stat"><b>${C.nf(Math.round(vol))}</b><span>kg volumen</span></div>
       <div class="stat"><b>${ents.length}</b><span>ejercicios</span></div></div>` : ""}
-    ${s && s.copiadaDe ? `<p class="muted" style="margin:0">Copiada del ${C.esc(C.fecha(s.copiadaDe))}. Los números en gris son tu mejor marca de cada ejercicio.</p>` : ""}
+    ${s && s.plan ? `<p class="muted" style="margin:0">Del plan «${C.esc(s.plan.nombre)}» · ${PL.DIAS_PLAN[s.plan.dia] || ""}${s.plan.sesion ? ` · ${C.esc(s.plan.sesion)}` : ""}. Los números en gris son lo que hiciste la última vez.</p>`
+      : s && s.copiadaDe ? `<p class="muted" style="margin:0">Copiada del ${C.esc(C.fecha(s.copiadaDe))}. Los números en gris son tu mejor marca de cada ejercicio.</p>` : ""}
     ${!ents.length && hayOtras ? `<div class="btn-row"><button class="btn" data-e="copiar-abrir">${C.icon("copiar", 18)}Copiar una sesión anterior</button></div>` : ""}
+    ${ents.length && planes().length && !E.aplicando ? `<div class="btn-row"><button class="btn sm" data-e="ap-abrir">${C.icon("objetivo", 16)}Aplicar plan</button></div>` : ""}
     ${ents.length > 1 ? (() => { const todos = ents.every(e => E.plegados.has(e.ejercicioId));
       return `<div class="btn-row"><button class="btn sm" data-e="plegar-todos">${C.icon(todos ? "abajo" : "arriba", 16)}${todos ? "Desplegar ejercicios" : "Plegar ejercicios"}</button></div>`; })() : ""}
   </div>
+  ${(!ents.length && !E.copiando && !E.picker) || (ents.length && E.aplicando) ? tarjetaPlan(ents) : ""}
   ${E.copiando ? vCopiar() : ""}
   ${ents.map((e, i) => vEjercicio(s, e, i, ents.length, prev)).join("")}
-  ${!ents.length && !E.picker && !E.copiando ? `<div class="card vacio">${C.icon("entreno", 32, "var(--mute)")}<p>Sin ejercicios el ${C.esc(C.fecha(E.fecha))}.</p></div>` : ""}
+  ${!ents.length && !E.picker && !E.copiando && !planes().length ? `<div class="card vacio">${C.icon("entreno", 32, "var(--mute)")}<p>Sin ejercicios el ${C.esc(C.fecha(E.fecha))}.</p></div>` : ""}
   ${E.picker ? vPicker() : `<button class="btn dashed" data-e="picker">${C.icon("mas", 18)}Añadir ejercicio</button>`}
   <div class="card" data-sec="criterios" data-plegada="1"><p class="card-title">Criterios de registro</p>
     <ul class="list">${(C.S.ajustes.entreno.criterios || []).map(c => `<li>${C.esc(c)}</li>`).join("")}</ul>
@@ -281,6 +287,51 @@ function vEjercicio(s, e, i, n, prev) {
   </div>`;
 }
 
+/* «Toca hoy»: el día del plan activo que corresponde a la fecha, con opción de
+   elegir otro día u otro plan. Con la sesión ya empezada: añadir o sustituir. */
+function apSel() {
+  const l = planes(); if (!l.length) return null;
+  const p = l.find(x => x.id === E.apPlan) || l.find(x => x.id === planActivo()) || l[0];
+  const dia = E.apDia ?? PL.diaDeFecha(E.fecha);
+  return { p, dia, d: p.dias[dia] };
+}
+function tarjetaPlan(ents) {
+  const sel = apSel(); if (!sel) return "";
+  const { p, dia, d } = sel, mapa = PL.porId(C.S.ejercicios), l = planes();
+  const n = PL.seriesTotales(d), propio = dia === PL.diaDeFecha(E.fecha);
+  const titulo = !ents.length && propio ? (E.fecha === hoyISO() ? "Toca hoy" : `Toca el ${diaSemana(E.fecha)}`) : "Aplicar plan";
+  const ya = new Set(ents.map(e => e.ejercicioId));
+  const faltan = d.ejercicios.filter(x => !ya.has(x.ejercicioId) && mapa[x.ejercicioId]).length;
+  return `<div class="card accent" id="ap-card"><p class="card-title">${titulo}</p>
+    <div><b>${PL.DIAS_PLAN[dia]}${d.nombre ? ` · ${C.esc(d.nombre)}` : ""}</b> <span class="muted">· ${p.id === planActivo() ? "★ " : ""}${C.esc(p.nombre)}</span></div>
+    ${d.ejercicios.length ? `<div class="items">${d.ejercicios.map(x => { const e = mapa[x.ejercicioId];
+        return `<div class="item franja ap-ej" style="${e ? franja(e.grupos) : ""}"><span class="item-main"><b>${e ? C.esc(e.nombre) : "Ejercicio eliminado (se omitirá)"}</b></span><span class="mono muted">${x.series} ${x.series === 1 ? "serie" : "series"}</span></div>`; }).join("")}</div>
+      ${chipsGrupos(PL.seriesDia(d, mapa))}
+      <p class="muted" style="margin:0">${d.ejercicios.length} ejercicios · ${n} series. En gris irá lo que hiciste la última vez en cada ejercicio, serie a serie.</p>
+      ${ents.length ? `<div class="btn-row"><button class="btn primary" data-e="ap-anadir" ${faltan ? "" : "disabled"}>Añadir los que faltan (${faltan})</button><button class="btn danger" data-e="ap-sustituir">Sustituir la sesión</button><button class="btn" data-e="ap-cerrar">Cancelar</button></div>`
+        : `<div class="btn-row"><button class="btn primary" data-e="ap-aplicar">${C.icon("check", 18)}Aplicar</button></div>`}`
+    : `<p class="muted" style="margin:0">Descanso en este plan. Elige otro día si quieres entrenar.</p>${ents.length ? `<div class="btn-row"><button class="btn" data-e="ap-cerrar">Cancelar</button></div>` : ""}`}
+    <div class="sub-label">Otro día</div>
+    <div class="chips">${PL.DIAS_PLAN.map((nd, j) => `<button class="chip" data-e="ap-dia" data-v="${j}" aria-pressed="${j === dia}">${nd.slice(0, 3)}${p.dias[j].ejercicios.length ? "" : " ·"}</button>`).join("")}</div>
+    ${l.length > 1 ? `<div class="sub-label">Otro plan</div><div class="chips">${l.map(x => `<button class="chip" data-e="ap-plan" data-id="${x.id}" aria-pressed="${x.id === p.id}">${x.id === planActivo() ? "★ " : ""}${C.esc(x.nombre)}</button>`).join("")}</div>` : ""}
+    <p class="muted" style="margin:0">Los días marcados con «·» son de descanso en el plan.</p></div>`;
+}
+/* Aplica el día elegido a la fecha: «nueva» (sesión vacía), «anadir» o «sustituir» */
+function aplicarPlan(modo) {
+  const sel = apSel(); if (!sel) return;
+  const { p, dia, d } = sel;
+  guardarYa();
+  const r = PL.ejerciciosDesdePlan(d, PL.porId(C.S.ejercicios), sesiones(), E.fecha);
+  let nuevos = r.ejercicios;
+  conSesion(s => {
+    if (modo === "anadir") { const ya = new Set(s.ejercicios.map(e => e.ejercicioId)); nuevos = r.ejercicios.filter(e => !ya.has(e.ejercicioId)); s.ejercicios.push(...nuevos); }
+    else { s.ejercicios = r.ejercicios; delete s.copiadaDe; }
+    s.plan = { id: p.id, nombre: p.nombre, dia, sesion: d.nombre || "" };
+  });
+  E.aplicando = false; E.apPlan = null; E.apDia = null;
+  const series = nuevos.reduce((a, e) => a + e.series.length, 0);
+  C.toast(`${modo === "anadir" ? "Añadidos" : "Aplicado"}: ${nuevos.length} ejercicios, ${series} series.${r.omitidos ? ` ${r.omitidos} del plan ya no están en el catálogo y se han omitido.` : ""}`, r.omitidos ? 6000 : 3500);
+}
 function vCopiar() {
   const dn = parseISO(E.fecha).getDay();
   const cands = sesiones().filter(x => x.fecha !== E.fecha && x.ejercicios.length).sort((a, b) => a.fecha < b.fecha ? 1 : -1);
@@ -815,6 +866,16 @@ export function click(e) {
     case "subir": case "bajar": conSesion(s => { const k = act === "subir" ? i - 1 : i + 1; if (k < 0 || k >= s.ejercicios.length) return; [s.ejercicios[i], s.ejercicios[k]] = [s.ejercicios[k], s.ejercicios[i]]; }); break;
     case "quitar-ej": conSesion(s => { s.ejercicios.splice(i, 1); }); C.toast("Ejercicio quitado de la sesión."); break;
     case "copiar-abrir": E.copiando = true; E.picker = false; break;
+    case "ap-abrir": E.aplicando = true; E.picker = false; E.copiando = false; E.apPlan = null; E.apDia = null; break;
+    case "ap-cerrar": E.aplicando = false; E.apPlan = null; E.apDia = null; break;
+    case "ap-dia": E.apDia = +b.dataset.v; break;
+    case "ap-plan": E.apPlan = b.dataset.id; break;
+    case "ap-aplicar": case "ap-anadir": aplicarPlan(act === "ap-anadir" ? "anadir" : "nueva"); break;
+    case "ap-sustituir": {
+      const s = sesionDe(E.fecha), hechas = s ? s.ejercicios.reduce((a, e) => a + e.series.filter(completa).length, 0) : 0;
+      C.confirmar("Sustituir la sesión", `Se quitarán los ${s ? s.ejercicios.length : 0} ejercicios de este día${hechas ? `, con ${hechas} ${hechas === 1 ? "serie ya registrada" : "series ya registradas"},` : ""} y se pondrán los del plan. No se puede deshacer.`, "Sustituir", () => { aplicarPlan("sustituir"); C.render(); });
+      return true;
+    }
     case "copiar-cerrar": E.copiando = false; break;
     case "copiar": {
       const src = sesionDe(b.dataset.f); if (!src) break;
@@ -827,12 +888,12 @@ export function click(e) {
             unilateral: ej ? !!ej.unilateral : !!e.unilateral,
             series: ref.map(r => ({ peso: null, reps: null, ...(r.peso != null ? { sugPeso: r.peso } : {}), ...(r.reps != null ? { sugReps: r.reps } : {}) })) };
         });
-        s.copiadaDe = src.fecha;
+        s.copiadaDe = src.fecha; delete s.plan;
       });
       E.copiando = false; C.toast(`Copiada la sesión del ${C.fecha(src.fecha)}.`); break;
     }
     case "ver-ej": E.progEj = b.dataset.id; E.punto = null; window.scrollTo({ top: 0, behavior: "smooth" }); break;
-    case "ir-fecha": E.fecha = b.dataset.f; E.sub = "registrar"; window.scrollTo(0, 0); break;
+    case "ir-fecha": E.fecha = b.dataset.f; E.sub = "registrar"; cerrarFormularios(); window.scrollTo(0, 0); break;
     case "pedir-borrar": E.confirmBorrar = b.dataset.f; break;
     case "no-borrar": E.confirmBorrar = null; break;
     case "borrar-ses": {
@@ -878,7 +939,7 @@ export function change(t) {
     const p = planSel(); if (!p) return true;
     p.dias[+t.dataset.pldn].nombre = t.value.trim().slice(0, 30); guardarPlan(p); C.render(); return true;
   }
-  if (t.id === "e-fecha") { guardarYa(); E.fecha = t.value || hoyISO(); E.picker = false; E.copiando = false; C.render(); return true; }
+  if (t.id === "e-fecha") { guardarYa(); E.fecha = t.value || hoyISO(); E.picker = false; E.copiando = false; E.aplicando = false; E.apPlan = null; E.apDia = null; C.render(); return true; }
   if (!t.dataset.set) return false;
   const [i, j] = t.dataset.set.split(":").map(Number);
   const s = sesionDe(E.fecha); if (!s) return true;

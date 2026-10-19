@@ -50,5 +50,32 @@ const u = PL.usoEjercicio(r.sesiones, usado.id);
 ok(u.sesiones > 2 && u.ultima, "uso");
 const cambiadas = PL.aplicarAlHistorial(r.sesiones, usado.id, { nombre: "Nuevo nombre", grupos: { Core: 1 }, unilateral: true });
 ok(cambiadas.length === u.sesiones && cambiadas.every(s => s.ejercicios.filter(e => e.ejercicioId === usado.id).every(e => e.nombre === "Nuevo nombre" && e.grupos.Core === 1 && e.unilateral)), "aplicar al historial");
+
+// Aplicar un día del plan a una fecha: referencia = la última vez, serie a serie; las sobrantes vacías
+{
+  const r2 = importarCopias({ gym: JSON.parse(fs.readFileSync(process.argv[2])), fit: JSON.parse(fs.readFileSync(process.argv[3])) });
+  const m2 = PL.porId(r2.ejercicios);
+  const ord = r2.sesiones.slice().sort((a, b) => a.fecha < b.fecha ? -1 : 1);
+  const conDos = x => x.ejercicios.find(e => e.series.filter(s => s.peso != null && s.reps != null).length >= 2);
+  const ultima = ord.slice().reverse().find(conDos), ej = conDos(ultima);
+  // la última vez de ESE ejercicio puede ser posterior a esta sesión: se busca la más reciente que lo contenga
+  const ultimaEj = ord.slice().reverse().find(x => x.ejercicios.some(e => e.ejercicioId === ej.ejercicioId && e.series.some(s => s.peso != null && s.reps != null)));
+  const hechas = ultimaEj.ejercicios.filter(e => e.ejercicioId === ej.ejercicioId).flatMap(e => e.series.filter(s => s.peso != null && s.reps != null));
+  const ref = PL.ultimaVez(r2.sesiones, ej.ejercicioId, "2099-01-01");
+  ok(ref && ref.fecha === ultimaEj.fecha && ref.series.length === hechas.length, "última vez = sesión más reciente");
+  const antes = PL.ultimaVez(r2.sesiones, ej.ejercicioId, ultimaEj.fecha);
+  ok(!antes || antes.fecha < ultimaEj.fecha, "antes de la fecha");
+  const dia = { nombre: "T", ejercicios: [{ ejercicioId: ej.ejercicioId, series: hechas.length + 2 }, { ejercicioId: "borrado", series: 3 }] };
+  const ap = PL.ejerciciosDesdePlan(dia, m2, r2.sesiones, "2099-01-01");
+  const ss = ap.ejercicios[0].series;
+  ok(ap.omitidos === 1 && ap.ejercicios.length === 1, "omitidos");
+  ok(ss.length === hechas.length + 2 && ss.every(x => x.peso === null && x.reps === null), "series vacías por rellenar");
+  ok(hechas.every((h, j) => ss[j].sugPeso === h.peso && ss[j].sugReps === h.reps), "gris serie a serie");
+  ok(ss.slice(hechas.length).every(x => x.sugPeso === undefined && x.sugReps === undefined), "series extra sin gris");
+  ok(ap.ejercicios[0].nombre === m2[ej.ejercicioId].nombre && JSON.stringify(ap.ejercicios[0].grupos) === JSON.stringify(m2[ej.ejercicioId].grupos), "nombre y grupos del catálogo");
+  ok(PL.diaDeFecha("2026-10-19") === 0 && PL.diaDeFecha("2026-10-25") === 6, "día de la semana");
+  const nuevo = PL.ejerciciosDesdePlan({ ejercicios: [{ ejercicioId: r2.ejercicios.find(e => !PL.usoEjercicio(r2.sesiones, e.id).sesiones)?.id || ej.ejercicioId, series: 2 }] }, m2, r2.sesiones, "1990-01-01");
+  ok(nuevo.ejercicios[0].series.every(x => x.sugPeso === undefined), "sin historial: sin gris");
+}
 console.log(fallos ? `${fallos} FALLOS` : "TODO CORRECTO");
 process.exit(fallos ? 1 : 0);

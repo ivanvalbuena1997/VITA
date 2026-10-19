@@ -103,3 +103,35 @@ export function aplicarAlHistorial(sesiones, ejId, { nombre, grupos, unilateral 
   });
   return cambiadas;
 }
+
+/* ---------- aplicar un día del plan a una fecha ---------- */
+/* Series hechas la última vez que hiciste un ejercicio (antes de una fecha) */
+export function ultimaVez(sesiones, ejId, antesDe) {
+  let mejor = null;
+  sesiones.forEach(s => {
+    if (antesDe && s.fecha >= antesDe) return;
+    if (mejor && s.fecha <= mejor.fecha) return;
+    const hechas = s.ejercicios.filter(e => e.ejercicioId === ejId).flatMap(e => e.series.filter(completa));
+    if (hechas.length) mejor = { fecha: s.fecha, series: hechas.map(x => ({ peso: x.peso, reps: x.reps })) };
+  });
+  return mejor;
+}
+/* Ejercicios de sesión a partir de un día del plan. Cada serie lleva en gris
+   (sugPeso/sugReps) la misma serie de la última vez; las que pasen de las que
+   hiciste entonces van vacías. Los ejercicios borrados del catálogo se omiten. */
+export function ejerciciosDesdePlan(dia, mapa, sesiones, fecha) {
+  let omitidos = 0;
+  const ejercicios = [];
+  (dia.ejercicios || []).forEach(x => {
+    const e = mapa[x.ejercicioId]; if (!e) { omitidos++; return; }
+    const ref = ultimaVez(sesiones, e.id, fecha);
+    ejercicios.push({ ejercicioId: e.id, nombre: e.nombre, grupos: { ...(e.grupos || {}) }, unilateral: !!e.unilateral,
+      series: Array.from({ length: x.series }, (_, j) => {
+        const r = ref && ref.series[j];
+        return { peso: null, reps: null, ...(r ? { sugPeso: r.peso, sugReps: r.reps } : {}) };
+      }) });
+  });
+  return { ejercicios, omitidos };
+}
+/* Índice del día del plan (0 = lunes) para una fecha */
+export const diaDeFecha = iso => (new Date(iso + "T00:00:00").getDay() + 6) % 7;
