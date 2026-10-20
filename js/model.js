@@ -3,7 +3,7 @@
    Unidades: peso en kg, altura en cm, energía en kcal, gramos en g o ml según
    el alimento, fechas AAAA-MM-DD en hora local. La semana empieza en lunes. */
 
-export const APP_VERSION = "0.6.2";
+export const APP_VERSION = "0.6.3";
 export const SCHEMA_VERSION = 1;
 
 /* Grupos musculares. Cada rango semanal es solo «desde–hasta» (series), fijado

@@ -1,7 +1,7 @@
 /* V.I.T.A. — service worker.
    IMPORTANTE: sube VERSION cada vez que cambie cualquier archivo de la app;
    así el móvil detecta la versión nueva y muestra el aviso «Actualizar». */
-const VERSION = "vita-0.6.2";
+const VERSION = "vita-0.6.3";
 const FIREBASE = "vita-firebase-13.0.0";   // cambia si cambia FIREBASE_SDK en js/config.js
 
 const APP = [

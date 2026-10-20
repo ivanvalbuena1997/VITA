@@ -76,8 +76,13 @@ function barras(puntos, { linea = null, color = "var(--acc)", alto = 200, unidad
   const paso = Math.max(1, Math.ceil(puntos.length / 7));
   const marcas = rejilla ? Array.from({ length: Math.round(max / 1.08 / rejilla) + 1 }, (_, i) => i * rejilla) : [0, 1, 2, 3].map(i => max / 1.08 * i / 3);
   const grid = marcas.map(v => { const yy = y(v); return `<line x1="${L}" y1="${yy}" x2="${W - R}" y2="${yy}" class="g-grid"/><text x="${L - 5}" y="${yy + 4}" text-anchor="end" class="g-txt">${fmt(v)}</text>`; }).join("");
+  // p.segs = [{ v, color }] apila tramos de abajo arriba (p. ej. fases del sueño); su suma es p.v
   const bars = puntos.map((p, i) => { const x = L + i * gap + (gap - bw) / 2;
-    return (p.v > 0 ? `<rect x="${x}" y="${y(p.v)}" width="${bw}" height="${H - B - y(p.v)}" rx="2" fill="${p.color || color}"><title>${esc(p.titulo || p.x)}: ${fmt(p.v)} ${unidad}</title></rect>` : "")
+    let base = 0;
+    const tramos = p.segs ? p.segs.filter(sg => sg.v > 0).map(sg => { const y0 = y(base + sg.v), h = y(base) - y0; base += sg.v;
+      return `<rect x="${x}" y="${y0}" width="${bw}" height="${h}" fill="${sg.color}"/>`; }).join("") : "";
+    return (p.v > 0 ? (p.segs ? `<g><title>${esc(p.titulo || p.x)}: ${esc(p.detalle || `${fmt(p.v)} ${unidad}`)}</title>${tramos}</g>`
+      : `<rect x="${x}" y="${y(p.v)}" width="${bw}" height="${H - B - y(p.v)}" rx="2" fill="${p.color || color}"><title>${esc(p.titulo || p.x)}: ${fmt(p.v)} ${unidad}</title></rect>`) : "")
       + ((i % paso === 0 || i === puntos.length - 1) ? `<text x="${x + bw / 2}" y="${H - 8}" text-anchor="middle" class="g-txt">${esc(p.x)}</text>` : ""); }).join("");
   const obj = linea ? `<line x1="${L}" y1="${y(linea)}" x2="${W - R}" y2="${y(linea)}" class="g-obj"/>` : "";
   return `<svg viewBox="0 0 ${W} ${H}" class="graf" role="img">${grid}${bars}${obj}</svg>`;
@@ -237,7 +242,20 @@ function vSueno() {
   const r = P.rango.sueno, n = RANGOS[r], hoy = hoyISO(), obj = objSueno();
   const fechas = Array.from({ length: n }, (_, i) => sumarDias(hoy, -(n - 1 - i)));
   const res = A.resumenSueno(C.S.dias, fechas, obj);
-  const puntos = fechas.map(f => { const s = A.suenoDe(diaDe(f)); return { x: corta(f), titulo: `Noche al ${corta(f)}`, v: s ? s.min / 60 : 0, color: s ? colorSueno(s.min, obj) : null }; });
+  // Cada noche: profundo, ligero y REM apilados; lo dormido sin detalle de fase (noches a mano o sin fases) en gris
+  const puntos = fechas.map(f => {
+    const s = A.suenoDe(diaDe(f)); if (!s) return { x: corta(f), v: 0 };
+    const fa = s.fases || {}, crudo = k => Math.max(0, fa[k] || 0);
+    const suma = crudo("profundo") + crudo("ligero") + crudo("rem");
+    const k0 = suma > s.min ? s.min / suma : 1, en = k => crudo(k) * k0;   // por si las fases suman más que lo dormido
+    const conFase = Math.min(s.min, suma * k0);
+    const segs = [...FASES.filter(x => x.k !== "despierto").map(x => ({ v: en(x.k) / 60, color: x.c })), { v: Math.max(0, s.min - conFase) / 60, color: "var(--mute)" }];
+    const detalle = `${A.horasTxt(s.min)}${s.fases ? ` (profundo ${A.horasTxt(en("profundo"))}, ligero ${A.horasTxt(en("ligero"))}, REM ${A.horasTxt(en("rem"))})` : " · sin fases"}`;
+    return { x: corta(f), titulo: `Noche al ${corta(f)}`, v: s.min / 60, segs, detalle };
+  });
+  const hayFases = fechas.some(f => { const s = A.suenoDe(diaDe(f)); return s && s.fases; });
+  const haySinFases = fechas.some(f => { const s = A.suenoDe(diaDe(f)); return s && !s.fases; });
+  const leyendaFases = `<div class="leyenda">${hayFases ? FASES.filter(x => x.k !== "despierto").map(x => `<span><i style="background:${x.c}"></i>${x.n}</span>`).join("") : ""}${haySinFases ? `<span><i style="background:var(--mute)"></i>Sin fases</span>` : ""}</div>`;
   const fasesTxt = res.fases ? barraFases(res.fases) : `<p class="muted" style="margin:0">Las fases llegarán con Health Connect si Mi Fitness las escribe; a mano solo se guardan las horas.</p>`;
   // Análisis: últimos 90 días completos (hoy no, que aún no ha terminado)
   const desde = sumarDias(hoy, -90), hasta = sumarDias(hoy, -1);
@@ -249,7 +267,8 @@ function vSueno() {
   return selector("sueno", r, ["7d", "1m", "3m"]) + `
   <div class="card" data-sec="z-graf"><p class="card-title">Horas dormidas por noche</p>
     ${res.noches ? barras(puntos, { linea: obj, unidad: "h", fmt: f1, rejilla: 2 }) : `<p class="muted" style="margin:0">Sin noches apuntadas en este periodo. Apúntalas en Progreso → Día.</p>`}
-    <p class="muted" style="margin:0">La raya es tu objetivo (${f1(obj)} h). Verde: lo cumple; azul: hasta 1 h menos; naranja: más de 1 h menos. Cada noche va en el día en que te despiertas.</p></div>
+    ${res.noches ? leyendaFases : ""}
+    <p class="muted" style="margin:0">La raya es tu objetivo (${f1(obj)} h). Cada barra es el tiempo dormido de la noche, sin los ratos despierto, repartido por fases. Las noches sin fases (las apuntadas a mano o sin detalle del reloj) van en gris. Cada noche va en el día en que te despiertas.</p></div>
   ${res.noches ? `<div class="card" data-sec="z-datos"><p class="card-title">Resumen · ${RANGO_TXT[r]}</p>
     <div class="grid3">
       <div class="stat"><b style="color:${colorSueno(res.mediaMin, obj)}">${f1(res.mediaMin / 60)}</b><span>horas de media (${res.noches} noches)</span></div>
