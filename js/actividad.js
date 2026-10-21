@@ -146,10 +146,10 @@ function vDia() {
     <div class="fila-dato"><input class="num grande" id="a-peso" inputmode="decimal" value="${d.peso ? String(d.peso).replace(".", ",") : ""}" placeholder="kg" aria-label="Peso del día en kg"><span class="muted">kg · opcional</span></div>
     <p class="muted" style="margin:0">Peso para los cálculos de este día: ${g.peso ? `<b>${f1(g.peso)} kg</b> (${esc(g.pesoFuente)})` : "falta"}.</p></div>
   <div class="card" data-sec="d-cardio"><p class="card-title">Cardio</p>
-    ${(d.cardio || []).map((c, i) => `<button class="item" data-a="cardio-editar" data-i="${i}"><span class="item-main"><b>${c.tipo === "cinta" ? "Cinta" : "Bici"} · ${f1(A.cardioMin(c))} min</b>
-      <span class="muted">${c.tipo === "cinta" ? `${f1(c.velocidad)} km/h · ${f1(c.inclinacion)} %${c.km ? ` · ${f2(c.km)} km` : ""}${c.pasosReloj ? ` · ${f0(c.pasosReloj)} pasos` : ""}${c.llevaba === false ? " · sin reloj" : ""}` : (c.vatios ? `${f0(c.vatios)} W` : `intensidad ${c.intensidad || "moderada"}`)}</span></span>
+    ${(d.cardio || []).map((c, i) => `<button class="item" data-a="cardio-editar" data-i="${i}"><span class="item-main"><b>${TIPO_CARDIO[c.tipo] || "Cardio"} · ${f1(A.cardioMin(c))} min</b>
+      <span class="muted">${A.esCinta(c) ? `${f1(A.velocidadCinta(c))} km/h · ${f1(c.inclinacion)} %${c.km ? ` · ${f2(c.km)} km` : ""}${c.pasosReloj ? ` · ${f0(c.pasosReloj)} pasos` : c.tipo === "carrera" && c.llevaba !== false ? ` · ≈ ${f0(A.cardioPasos(c))} pasos (estimados)` : ""}${c.llevaba === false ? " · sin reloj" : ""}` : (c.vatios ? `${f0(c.vatios)} W` : `intensidad ${c.intensidad || "moderada"}`)}</span></span>
       <span class="item-kcal mono">${f0(A.cardioKcal(c, g.peso))}</span></button>`).join("") || `<p class="muted" style="margin:0">Sin cardio este día.</p>`}
-    ${P.cardio ? formCardio(d) : `<div class="btn-row"><button class="btn sm" data-a="cardio-nuevo" data-v="cinta">${C.icon("mas", 16)}Cinta</button><button class="btn sm" data-a="cardio-nuevo" data-v="bici">${C.icon("mas", 16)}Bici</button></div>`}</div>
+    ${P.cardio ? formCardio(d) : `<div class="btn-row"><button class="btn sm" data-a="cardio-nuevo" data-v="cinta">${C.icon("mas", 16)}Andar en cinta</button><button class="btn sm" data-a="cardio-nuevo" data-v="carrera">${C.icon("mas", 16)}Correr en cinta</button><button class="btn sm" data-a="cardio-nuevo" data-v="bici">${C.icon("mas", 16)}Bici</button></div>`}</div>
   <div class="card" data-sec="d-gasto"><p class="card-title">Gasto del día</p>
     ${g.total == null ? `<p class="err" style="margin:0">Faltan datos para calcularlo: ${esc(g.faltan.join(", "))}. Complétalos en Ajustes → Cuerpo.</p>` : `
     ${filaGasto("Basal", g.basal, "Mifflin-St Jeor")}
@@ -188,12 +188,21 @@ function formSueno(s) {
     <p class="muted" style="margin:0">Horas dormidas sin contar los ratos despierto, como las da el reloj («7:30» o «7,5»). Si solo pones las horas de acostarte y despertarte, se usa la diferencia. ${hayHC() ? "Lo que corrijas aquí queda «a mano» y la sincronización no lo toca." : "Cuando funcione la app compañera, llegará solo desde Health Connect, con las fases."}</p>
     <div class="btn-row">${s ? `<button class="btn sm danger" type="button" data-a="sueno-borrar">${C.icon("papelera", 16)}Quitar</button><button class="btn sm" type="button" data-a="sueno-cancelar">Cancelar</button>` : ""}<button class="btn sm primary" type="submit">Guardar</button></div></form>`;
 }
+const TIPO_CARDIO = { cinta: "Andar en cinta", carrera: "Correr en cinta", bici: "Bici" };
 function formCardio(d) {
   const c = P.cardio.idx != null ? (d.cardio || [])[P.cardio.idx] || {} : {};
   const t = P.cardio.tipo, v = k => c[k] != null && c[k] !== "" ? String(c[k]).replace(".", ",") : "";
   return `<form id="a-cardio" class="pila-form sub-form">
-    <div class="sub-label">${P.cardio.idx != null ? "Editar" : "Nuevo"}: ${t === "cinta" ? "cinta" : "bici"}</div>
-    ${t === "cinta" ? `<div class="grid2">
+    <div class="sub-label">${P.cardio.idx != null ? "Editar" : "Nuevo"}: ${TIPO_CARDIO[t].toLowerCase()}</div>
+    ${t === "carrera" ? `<div class="grid2">
+      <label class="campo">Minutos<input name="min" inputmode="decimal" value="${v("min")}"></label>
+      <label class="campo">Distancia (km)<input name="km" inputmode="decimal" value="${v("km")}"></label>
+      <label class="campo">Inclinación (%)<input name="inclinacion" inputmode="decimal" value="${v("inclinacion")}" placeholder="0"></label>
+      <label class="campo">Velocidad (km/h)<input name="velocidad" inputmode="decimal" value="${v("velocidad")}" placeholder="opcional"></label>
+      <label class="campo">Pasos del reloj<input name="pasosReloj" inputmode="numeric" value="${v("pasosReloj")}" placeholder="opcional"></label></div>
+      <label class="check"><input type="checkbox" name="llevaba" ${c.llevaba !== false ? "checked" : ""}><span>Llevaba el reloj (sus pasos ya están en el total del día)</span></label>
+      <p class="muted" style="margin:0">Lo más fiable: al terminar, apunta el <b>tiempo</b> y la <b>distancia</b> que marca la cinta; la velocidad media se calcula sola (solo hace falta ponerla si no tienes la distancia). Si has cambiado de ritmo no pasa nada: el gasto depende de la distancia total. Si has cambiado la inclinación, pon la media. Si alternas andar y correr, apúntalo como dos registros (andar y correr). Los pasos de la carrera se descuentan del día; si no los apuntas, se estiman (${A.CADENCIA_CARRERA} por minuto, aproximado).</p>`
+    : t === "cinta" ? `<div class="grid2">
       <label class="campo">Minutos<input name="min" inputmode="decimal" value="${v("min")}"></label>
       <label class="campo">Velocidad (km/h)<input name="velocidad" inputmode="decimal" value="${v("velocidad")}"></label>
       <label class="campo">Inclinación (%)<input name="inclinacion" inputmode="decimal" value="${v("inclinacion")}"></label>
@@ -419,10 +428,18 @@ export function submit(form) {
   if (form.id === "a-cardio") {
     const fd = new FormData(form), tipo = P.cardio.tipo, idx = P.cardio.idx;
     const c = { id: idx != null ? ((diaDe(P.fecha) || {}).cardio[idx] || {}).id || nId() : nId(), tipo, min: num(fd.get("min")) };
-    if (tipo === "cinta") Object.assign(c, { velocidad: num(fd.get("velocidad")), inclinacion: num(fd.get("inclinacion")) ?? 0, km: num(fd.get("km")), pasosReloj: num(fd.get("pasosReloj")), llevaba: !!fd.get("llevaba") });
+    if (A.esCinta(c)) Object.assign(c, { velocidad: num(fd.get("velocidad")), inclinacion: num(fd.get("inclinacion")) ?? 0, km: num(fd.get("km")), pasosReloj: num(fd.get("pasosReloj")), llevaba: !!fd.get("llevaba") });
     else Object.assign(c, { vatios: num(fd.get("vatios")), intensidad: fd.get("intensidad") || "moderada" });
-    if (!A.cardioMin(c)) { C.toast(tipo === "cinta" ? "Pon los minutos, o la distancia y la velocidad." : "Pon los minutos."); return true; }
-    if (tipo === "cinta" && !c.velocidad) { C.toast("Pon la velocidad."); return true; }
+    if (tipo === "carrera") {
+      if (!c.min && !(c.km && c.velocidad)) { C.toast("Pon los minutos y la distancia."); return true; }
+      if (!c.km && !c.velocidad) { C.toast("Pon la distancia (o la velocidad media)."); return true; }
+      const vel = A.velocidadCinta(c);
+      if (vel < 4 || vel > 25) { C.toast(`Sale una velocidad media de ${f1(vel)} km/h: revisa el tiempo y la distancia.`); return true; }
+      if (c.inclinacion > 20) { C.toast("Revisa la inclinación (máximo 20 %)."); return true; }
+    } else {
+      if (!A.cardioMin(c)) { C.toast(tipo === "cinta" ? "Pon los minutos, o la distancia y la velocidad." : "Pon los minutos."); return true; }
+      if (tipo === "cinta" && !c.velocidad) { C.toast("Pon la velocidad."); return true; }
+    }
     const l = ((diaDe(P.fecha) || {}).cardio || []).slice(); if (idx != null) l[idx] = c; else l.push(c);
     guardarDia(P.fecha, { cardio: l });
     P.cardio = null; C.toast("Cardio guardado."); C.render(); return true;

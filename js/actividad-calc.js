@@ -9,8 +9,9 @@
    - Pasos: zancada = altura · 0,415; ritmo 4,5 km/h; 3,5 MET.
    - Entreno: cada serie efectiva (las unilaterales cuentan doble) son
      segundosSerie a 6 MET + descansoMin a 1,5 MET.
-   - Cardio: cinta andando VO2 = 0,1·v + 1,8·v·pendiente, corriendo (> 8 km/h)
-     0,2·v + 0,9·v·pendiente (v en m/min); bici
+   - Cardio: andar en cinta VO2 = 0,1·v + 1,8·v·pendiente (si pasa de 8 km/h,
+     la de correr); correr en cinta VO2 = 0,2·v + 0,9·v·pendiente siempre
+     (v en m/min; ACSM la valida por encima de unos 8 km/h); bici
      VO2 = 1,8·W·6,12/peso + 3,5; kcal = VO2 · peso · min / 1000 · 5.
      Bici sin vatios: 5,5 / 6,8 / 8,8 MET (suave / moderada / intensa).
    - Digestión (efecto térmico de los alimentos): ≈ 10 % de lo comido.
@@ -20,6 +21,16 @@ import { edadEn, toISO } from "./model.js";
 
 export const MET = { caminar: 3.5, serie: 6, descanso: 1.5, bici: { suave: 5.5, moderada: 6.8, intensa: 8.8 } };
 export const ZANCADA = 0.415, KMH_PASEO = 4.5, KCAL_POR_KG = 7700;
+/* Cadencia típica aproximada de un corredor aficionado (pasos/min). Solo se usa
+   para estimar los pasos de una carrera con reloj si no apuntas los del reloj. */
+export const CADENCIA_CARRERA = 160;
+export const esCinta = c => c.tipo === "cinta" || c.tipo === "carrera";
+/* Velocidad media: la apuntada o, si no, distancia / tiempo */
+export function velocidadCinta(c) {
+  const v = n0(c.velocidad); if (v) return v;
+  const km = n0(c.km), m = n0(c.min);
+  return km && m ? km / (m / 60) : 0;
+}
 export const CALIBRACION = { ventana: 28, diasMin: 21, pesajesMin: 6, diarioMin: 14, limite: 0.25, minimoComida: 0.5 };
 
 const n0 = v => { const n = parseFloat(String(v ?? "").replace(",", ".")); return Number.isFinite(n) && n > 0 ? n : 0; };
@@ -63,16 +74,17 @@ export const minutosPasos = (pasos, altura) => (pasos > 0 && altura > 0) ? pasos
 export const kmPasos = (pasos, altura) => pasos * (altura * ZANCADA / 100) / 1000;
 export function cardioMin(c) {
   const m = n0(c.min); if (m) return m;
-  if (c.tipo === "cinta" && n0(c.km) && n0(c.velocidad)) return n0(c.km) / n0(c.velocidad) * 60;
+  if (esCinta(c) && n0(c.km) && n0(c.velocidad)) return n0(c.km) / n0(c.velocidad) * 60;
   return 0;
 }
 export function cardioKcal(c, peso) {
   const min = cardioMin(c); if (!(peso > 0) || !min) return 0;
-  if (c.tipo === "cinta") {
-    const v = n0(c.velocidad); if (!v) return 0;
+  if (esCinta(c)) {
+    const v = velocidadCinta(c); if (!v) return 0;
     const S = v * 1000 / 60, G = n0(c.inclinacion) / 100;
-    // ACSM: andando (hasta unos 6-8 km/h) 0,1·v + 1,8·v·pendiente; corriendo (más de 8 km/h) 0,2·v + 0,9·v·pendiente
-    const vo2 = v > 8 ? 0.2 * S + 0.9 * S * G : 0.1 * S + 1.8 * S * G;
+    // ACSM (neta): andando 0,1·v + 1,8·v·pendiente; corriendo 0,2·v + 0,9·v·pendiente
+    const corriendo = c.tipo === "carrera" || v > 8;
+    const vo2 = corriendo ? 0.2 * S + 0.9 * S * G : 0.1 * S + 1.8 * S * G;
     return vo2 * peso * min / 1000 * 5;
   }
   const w = n0(c.vatios);
@@ -81,8 +93,9 @@ export function cardioKcal(c, peso) {
 }
 /* Pasos de la cinta que ya están en el recuento del día (si llevabas el reloj) */
 export function cardioPasos(c, altura) {
-  if (c.tipo !== "cinta" || c.llevaba === false) return 0;
+  if (!esCinta(c) || c.llevaba === false) return 0;
   const p = n0(c.pasosReloj); if (p) return Math.round(p);
+  if (c.tipo === "carrera") return Math.round(cardioMin(c) * CADENCIA_CARRERA);
   let km = n0(c.km); if (!km && n0(c.velocidad)) km = n0(c.velocidad) * cardioMin(c) / 60;
   return km && altura > 0 ? Math.round(km * 1000 / (altura * ZANCADA / 100)) : 0;
 }

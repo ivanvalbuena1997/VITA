@@ -125,8 +125,8 @@ export function exportarSemana(lunes, datos, { version, hoy } = {}) {
     if (hoy && f === hoy) o.en_curso = true;
     if (d.peso) o.peso_kg = d.peso;
     if (d.pasos) o.pasos = d.pasos;
-    if (d.cardio && d.cardio.length) o.cardio = d.cardio.map(c => c.tipo === "cinta"
-      ? `cinta ${r1(A.cardioMin(c))} min a ${c.velocidad} km/h y ${c.inclinacion || 0} %`
+    if (d.cardio && d.cardio.length) o.cardio = d.cardio.map(c => A.esCinta(c)
+      ? `${c.tipo === "carrera" ? "correr en cinta" : "andar en cinta"} ${r1(A.cardioMin(c))} min a ${r1(A.velocidadCinta(c))} km/h y ${c.inclinacion || 0} %${c.km ? ` (${c.km} km)` : ""}`
       : `bici ${r1(A.cardioMin(c))} min${c.vatios ? ` a ${c.vatios} W` : ` intensidad ${c.intensidad || "moderada"}`}`);
     if (s && s.ejercicios.some(e => e.series.some(completa))) o.entreno = {
       volumen_kg: r0(volumenKg(s)),

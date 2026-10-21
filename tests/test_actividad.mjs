@@ -62,5 +62,19 @@ ok(Math.abs(A.cardioKcal(run, 65) - (0.2 * Sr + 0.9 * Sr * 0.01) * 65 * 10 / 100
 const ing2 = { ...ing }; Object.keys(ing2).slice(0, 20).forEach(f => ing2[f] = 600);
 const cal2 = A.calibracion("2026-09-28", { dias, sesiones: [], ajustes: r.ajustes, ingesta: ing2 });
 ok(!cal2.listo && cal2.diasComida === 8, "días incompletos fuera: " + cal2.diasComida);
+// Correr en cinta: ecuación de carrera siempre; velocidad = distancia / tiempo si no se apunta
+{
+  const k1 = A.cardioKcal({ tipo: "carrera", min: 30, km: 5, inclinacion: 1 }, 70);
+  const k2 = A.cardioKcal({ tipo: "carrera", min: 30, velocidad: 10, inclinacion: 1 }, 70);
+  const S = 10000 / 60, esperado = (0.2 * S + 0.9 * S * 0.01) * 70 * 30 / 1000 * 5;
+  ok(Math.abs(k1 - esperado) < 0.01 && Math.abs(k2 - esperado) < 0.01, `carrera 10 km/h 1 %: ${k1.toFixed(1)} / ${esperado.toFixed(1)}`);
+  const lento = A.cardioKcal({ tipo: "carrera", min: 30, velocidad: 7 }, 70), andando = A.cardioKcal({ tipo: "cinta", min: 30, velocidad: 7 }, 70);
+  ok(lento > andando * 1.9, "a 7 km/h corriendo usa la ecuación de carrera (≈ doble que andando sin pendiente)");
+  ok(A.cardioMin({ tipo: "carrera", km: 5, velocidad: 10 }) === 30, "minutos desde distancia y velocidad");
+  ok(A.cardioPasos({ tipo: "carrera", min: 30, km: 5 }, 175) === 30 * A.CADENCIA_CARRERA, "pasos estimados por cadencia");
+  ok(A.cardioPasos({ tipo: "carrera", min: 30, km: 5, pasosReloj: 4950 }, 175) === 4950, "pasos del reloj");
+  ok(A.cardioPasos({ tipo: "carrera", min: 30, km: 5, llevaba: false }, 175) === 0, "sin reloj, no se descuentan");
+  ok(A.cardioKcal({ tipo: "cinta", min: 30, velocidad: 9 }, 70) === A.cardioKcal({ tipo: "carrera", min: 30, velocidad: 9 }, 70), "andar a más de 8 km/h sigue usando la de carrera");
+}
 console.log(fallos ? `${fallos} FALLOS` : "TODO CORRECTO");
 process.exit(fallos ? 1 : 0);
