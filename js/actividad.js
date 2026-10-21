@@ -36,7 +36,7 @@ function ctxGasto() {
 }
 /* Guarda solo los campos que cambian (null = quitar el campo). Si el día se
    queda sin datos, se borra. Así no se pisa lo que escriba la app compañera. */
-const DATOS_DIA = ["pasos", "peso", "cardio", "sueno"];
+const DATOS_DIA = ["pasos", "peso", "cardio", "sueno", "grasaPct", "musculoKg"];
 function guardarDia(f, campos) {
   let d = diaDe(f);
   if (!d) { d = { fecha: f }; C.S.dias.push(d); }
@@ -144,7 +144,15 @@ function vDia() {
   ${tarjetaSueno(f, d)}
   <div class="card" data-sec="d-peso"><p class="card-title">Peso</p>
     <div class="fila-dato"><input class="num grande" id="a-peso" inputmode="decimal" value="${d.peso ? String(d.peso).replace(".", ",") : ""}" placeholder="kg" aria-label="Peso del día en kg"><span class="muted">kg · opcional</span></div>
-    <p class="muted" style="margin:0">Peso para los cálculos de este día: ${g.peso ? `<b>${f1(g.peso)} kg</b> (${esc(g.pesoFuente)})` : "falta"}.</p></div>
+    <p class="muted" style="margin:0">Peso para los cálculos de este día: ${g.peso ? `<b>${f1(g.peso)} kg</b> (${esc(g.pesoFuente)})` : "falta"}.</p>
+    <div class="sub-label">Báscula de bioimpedancia · opcional</div>
+    <div class="grid2">
+      <label class="campo">Grasa (%)<input id="a-grasa" inputmode="decimal" value="${d.grasaPct ? String(d.grasaPct).replace(".", ",") : ""}" placeholder="%"></label>
+      <label class="campo">Masa muscular (kg)<input id="a-musculo" inputmode="decimal" value="${d.musculoKg ? String(d.musculoKg).replace(".", ",") : ""}" placeholder="kg"></label>
+    </div>
+    ${d.grasaPct && d.peso ? `<p class="muted" style="margin:0">Masa grasa <b>${f1(d.peso * d.grasaPct / 100)} kg</b> · masa magra (todo lo que no es grasa) <b>${f1(d.peso * (1 - d.grasaPct / 100))} kg</b>.</p>` : ""}
+    ${d.grasaPct && !d.peso ? `<p class="muted" style="margin:0">Apunta también el peso de hoy para calcular la masa grasa y la magra.</p>` : ""}
+    <p class="muted" style="margin:0">Estimaciones de la báscula: un día suelto puede fallar varios puntos, sobre todo por el agua del cuerpo. Mide siempre igual (por la mañana, en ayunas, tras orinar, descalzo y con los pies secos) y fíjate en la tendencia de varias semanas (Progreso → Peso).</p></div>
   <div class="card" data-sec="d-cardio"><p class="card-title">Cardio</p>
     ${(d.cardio || []).map((c, i) => `<button class="item" data-a="cardio-editar" data-i="${i}"><span class="item-main"><b>${TIPO_CARDIO[c.tipo] || "Cardio"} · ${f1(A.cardioMin(c))} min</b>
       <span class="muted">${A.esCinta(c) ? `${f1(A.velocidadCinta(c))} km/h · ${f1(c.inclinacion)} %${c.km ? ` · ${f2(c.km)} km` : ""}${c.pasosReloj ? ` · ${f0(c.pasosReloj)} pasos` : c.tipo === "carrera" && c.llevaba !== false ? ` · ≈ ${f0(A.cardioPasos(c))} pasos (estimados)` : ""}${c.llevaba === false ? " · sin reloj" : ""}` : (c.vatios ? `${f0(c.vatios)} W` : `intensidad ${c.intensidad || "moderada"}`)}</span></span>
@@ -324,7 +332,29 @@ function vPeso() {
       <div class="stat"><b class="acc">${pc.valor ? f1(pc.valor) : "—"}</b><span>kg para los cálculos</span></div>
       <div class="stat"><b>${pend != null ? `${pend >= 0 ? "+" : "−"}${f2(Math.abs(pend * 7))}` : "—"}</b><span>kg/semana (4 semanas)</span></div>
     </div>
-    <p class="muted" style="margin:0">Peso de cálculo: ${esc(pc.fuente)}. ${pend == null ? "La tendencia necesita al menos 3 pesajes en las últimas 4 semanas." : ""}</p></div>`;
+    <p class="muted" style="margin:0">Peso de cálculo: ${esc(pc.fuente)}. ${pend == null ? "La tendencia necesita al menos 3 pesajes en las últimas 4 semanas." : ""}</p></div>
+  ${tarjetaComposicion(desde, hoy)}`;
+}
+/* Composición corporal de la báscula: tendencia (media de los últimos 7 registros) y medias de 4 semanas */
+function tarjetaComposicion(desde, hoy) {
+  const todos = A.composiciones(C.S.dias);
+  if (!todos.length) return `<div class="card" data-sec="w-comp"><p class="card-title">Composición corporal</p>
+    <p class="muted" style="margin:0">Sin datos de la báscula. Apunta el % de grasa y la masa muscular en Progreso → Día, junto al peso.</p></div>`;
+  const N = 7;
+  const grasa = A.mediaMovilDe(todos, "grasaPct", N).filter(p => p.fecha >= desde);
+  const gk = A.mediaMovilDe(todos, "grasaKg", N).filter(p => p.fecha >= desde), mk = A.mediaMovilDe(todos, "magraKg", N).filter(p => p.fecha >= desde);
+  const mu = A.mediaMovilDe(todos, "musculoKg", N).filter(p => p.fecha >= desde);
+  const R4 = A.resumenComposicion(C.S.dias, hoy, 28);
+  const fila = (n, k, u, dec = 1) => R4.actual[k] == null ? "" : `<div class="row"><span>${n}</span><span><b>${f1(R4.actual[k])}</b> ${u}${R4.cambio[k] != null ? ` <span class="muted">(${R4.cambio[k] >= 0 ? "+" : "−"}${f1(Math.abs(R4.cambio[k]))} frente a las 4 semanas anteriores)</span>` : ""}</span></div>`;
+  return `<div class="card" data-sec="w-comp"><p class="card-title">Composición corporal</p>
+    ${grasa.length ? `<div class="sub-label">% de grasa</div>${lineas([{ nombre: "Medidas", color: "var(--dim)", puntos: grasa.map(p => ({ x: p.fecha, v: p.peso })), linea: false, puntosVisibles: true },
+      { nombre: `Media de ${N} medidas`, color: "var(--gra)", puntos: grasa.map(p => ({ x: p.fecha, v: p.media })), grosor: 2.6 }], { decimales: 1, alto: 180 })}` : ""}
+    ${gk.length >= 2 ? `<div class="sub-label">Masa grasa y masa magra (kg, media de ${N})</div>${lineas([{ nombre: "Masa magra", color: "var(--acc)", puntos: mk.map(p => ({ x: p.fecha, v: p.media })), puntosVisibles: mk.length <= 31 }], { decimales: 1, alto: 150 })}
+      ${lineas([{ nombre: "Masa grasa", color: "var(--gra)", puntos: gk.map(p => ({ x: p.fecha, v: p.media })), puntosVisibles: gk.length <= 31 }], { decimales: 1, alto: 150 })}` : ""}
+    ${mu.length >= 2 ? `<div class="sub-label">Masa muscular (kg, media de ${N})</div>${lineas([{ nombre: "Masa muscular", color: "var(--ok)", puntos: mu.map(p => ({ x: p.fecha, v: p.media })), puntosVisibles: mu.length <= 31 }], { decimales: 1, alto: 150 })}` : ""}
+    ${R4.actual.n ? `<div class="sub-label">Media de las últimas 4 semanas · ${R4.actual.n} ${R4.actual.n === 1 ? "medida" : "medidas"}</div>
+      ${fila("Grasa", "grasaPct", "%")}${fila("Masa grasa", "grasaKg", "kg")}${fila("Masa magra", "magraKg", "kg")}${fila("Masa muscular", "musculoKg", "kg")}` : ""}
+    <p class="muted" style="margin:0">Son estimaciones de la báscula (bioimpedancia): cada medida suelta puede fallar varios puntos, sobre todo por el agua del cuerpo. Lo que informa es la tendencia de varias semanas medida siempre en las mismas condiciones. Masa magra = peso − masa grasa (incluye músculo, agua, órganos y hueso); solo se calcula los días con peso y % de grasa.</p></div>`;
 }
 
 /* ---------- gasto ---------- */
@@ -416,6 +446,13 @@ export function change(t) {
     const v = Math.round(num(t.value) || 0);
     if (v > 150000) { C.toast("Esos pasos no parecen correctos."); return true; }
     guardarDia(P.fecha, v > 0 ? { pasos: v, pasosFuente: "manual" } : { pasos: null, pasosFuente: null }); C.render(); return true;
+  }
+  if (t.id === "a-grasa" || t.id === "a-musculo") {
+    const k = t.id === "a-grasa" ? "grasaPct" : "musculoKg", v = num(t.value), [lo, hi] = A.LIMITES_COMPOSICION[k];
+    if (v != null && v > 0 && (v < lo || v > hi)) { C.toast(k === "grasaPct" ? `El % de grasa debe estar entre ${lo} y ${hi}.` : `La masa muscular debe estar entre ${lo} y ${hi} kg.`); return true; }
+    const d = diaDe(P.fecha);
+    if (k === "musculoKg" && v && d && d.peso && v >= d.peso) { C.toast("La masa muscular no puede ser mayor que el peso."); return true; }
+    guardarDia(P.fecha, { [k]: v ? Math.round(v * 10) / 10 : null }); C.render(); return true;
   }
   if (t.id === "a-peso") {
     const v = num(t.value);

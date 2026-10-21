@@ -226,3 +226,31 @@ export function resumenSueno(dias, fechas, objetivoH = SUENO_OBJETIVO_H) {
   };
 }
 export const horaReloj = min => { if (min == null) return "—"; const v = Math.round(min) % (24 * 60); return `${Math.floor(v / 60)}:${String(v % 60).padStart(2, "0")}`; };
+
+/* ---------- composición corporal (báscula de bioimpedancia) ----------
+   dias[].grasaPct (% de grasa) y dias[].musculoKg (masa muscular) se apuntan a
+   mano desde la báscula. Son ESTIMACIONES con mucho error en un día suelto
+   (sobre todo por el agua del cuerpo): solo se usan como tendencia. Con el peso
+   del mismo día salen la masa grasa y la masa magra (peso − grasa) en kg. */
+export const LIMITES_COMPOSICION = { grasaPct: [3, 60], musculoKg: [10, 120] };
+export function composiciones(dias) {
+  return dias.filter(d => n0(d.grasaPct) || n0(d.musculoKg)).map(d => {
+    const peso = n0(d.peso), g = n0(d.grasaPct), m = n0(d.musculoKg);
+    return { fecha: d.fecha, peso: peso || null, grasaPct: g || null, musculoKg: m || null,
+      grasaKg: peso && g ? peso * g / 100 : null, magraKg: peso && g ? peso * (1 - g / 100) : null };
+  }).sort((a, b) => a.fecha < b.fecha ? -1 : 1);
+}
+/* Medias de dos ventanas seguidas de «dias» días (la actual termina en «hasta») y su diferencia */
+export function resumenComposicion(dias, hasta, ventana = 28) {
+  const l = composiciones(dias);
+  const media = (desde, fin) => {
+    const v = l.filter(x => x.fecha > desde && x.fecha <= fin);
+    const m = k => { const xs = v.map(x => x[k]).filter(x => x != null); return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null; };
+    return { n: v.length, grasaPct: m("grasaPct"), grasaKg: m("grasaKg"), magraKg: m("magraKg"), musculoKg: m("musculoKg") };
+  };
+  const actual = media(sumarDias(hasta, -ventana), hasta), anterior = media(sumarDias(hasta, -2 * ventana), sumarDias(hasta, -ventana));
+  const dif = k => actual[k] != null && anterior[k] != null ? actual[k] - anterior[k] : null;
+  return { ventana, actual, anterior, cambio: { grasaPct: dif("grasaPct"), grasaKg: dif("grasaKg"), magraKg: dif("magraKg"), musculoKg: dif("musculoKg") }, ultimo: l[l.length - 1] || null };
+}
+/* Media móvil de los últimos n registros de un campo */
+export const mediaMovilDe = (lista, k, n = 7) => mediaMovil(lista.filter(x => x[k] != null).map(x => ({ fecha: x.fecha, peso: x[k] })), n);

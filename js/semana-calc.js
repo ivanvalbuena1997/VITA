@@ -104,7 +104,11 @@ export function resumenSemana(lunes, datos, hoy) {
     kgSemana: pend != null ? pend * 7 : null, calculo: pesoCalc };
   // sueño: la noche cuenta el día en que te despiertas (también hoy)
   const sueno = A.resumenSueno(X.dias, fechas, (aj.sueno || {}).objetivoH || A.SUENO_OBJETIVO_H);
-  return { lunes, domingo: sumarDias(lunes, 6), fechas, completas, entreno, comida, actividad, peso, sueno };
+  // composición corporal (báscula): medias de las medidas de la semana
+  const cs = A.composiciones(X.dias).filter(x => enSemana(x.fecha));
+  const mc = k => { const v = cs.map(x => x[k]).filter(x => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+  const composicion = { medidas: cs.length, grasaPct: mc("grasaPct"), grasaKg: mc("grasaKg"), magraKg: mc("magraKg"), musculoKg: mc("musculoKg") };
+  return { lunes, domingo: sumarDias(lunes, 6), fechas, completas, entreno, comida, actividad, peso, sueno, composicion };
 }
 
 /* ---------- exportación para el entrenador IA ----------
@@ -124,6 +128,8 @@ export function exportarSemana(lunes, datos, { version, hoy } = {}) {
     const o = { fecha: f, dia: DIAS[new Date(f + "T00:00:00").getDay()] };
     if (hoy && f === hoy) o.en_curso = true;
     if (d.peso) o.peso_kg = d.peso;
+    if (d.grasaPct) o.grasa_pct_bascula = d.grasaPct;
+    if (d.musculoKg) o.musculo_kg_bascula = d.musculoKg;
     if (d.pasos) o.pasos = d.pasos;
     if (d.cardio && d.cardio.length) o.cardio = d.cardio.map(c => A.esCinta(c)
       ? `${c.tipo === "carrera" ? "correr en cinta" : "andar en cinta"} ${r1(A.cardioMin(c))} min a ${r1(A.velocidadCinta(c))} km/h y ${c.inclinacion || 0} %${c.km ? ` (${c.km} km)` : ""}`
@@ -150,6 +156,7 @@ export function exportarSemana(lunes, datos, { version, hoy } = {}) {
       "Pesos de entreno: con barra el TOTAL (barra + discos); con mancuernas el de UNA; los unilaterales son por lado. Series a RIR 1-2.",
       "Comida: los alimentos con factor de cocción van en crudo con su equivalente hecho entre paréntesis; 'fuera' son estimaciones a ojo.",
       "Sueño: cada noche va en el día en que te despiertas; horas dormidas sin contar los ratos despierto.",
+      "Grasa y masa muscular vienen de una báscula de bioimpedancia doméstica: son estimaciones con mucho error en un día suelto; valóralas solo como tendencia de varias semanas.",
       "Un día sin comida, pasos, sueño o peso significa 'sin apuntar', no cero. Un día con en_curso=true es hoy y aún no ha terminado: no cuenta en las medias.",
       `Gasto: estimación (basal Mifflin-St Jeor + actividad ACSM neta + digestión ${aj.gasto.digestionPct ?? 10} % de lo comido)${R.actividad.calibrado ? `, multiplicado por ${R.actividad.factor.toFixed(2)} según la evolución real del peso` : ", sin calibrar con el peso todavía (la fórmula suele quedarse corta)"}.`
     ],
@@ -167,6 +174,7 @@ export function exportarSemana(lunes, datos, { version, hoy } = {}) {
       sueno: R.sueno.noches ? { noches: R.sueno.noches, media_h: r1(R.sueno.mediaMin / 60), noches_con_objetivo: R.sueno.conObjetivo, objetivo_h: (aj.sueno || {}).objetivoH || A.SUENO_OBJETIVO_H,
         ...(R.sueno.fases ? { fases_media_min: { profundo: r0(R.sueno.fases.profundo), ligero: r0(R.sueno.fases.ligero), rem: r0(R.sueno.fases.rem), despierto: r0(R.sueno.fases.despierto) } } : {}),
         ...(R.sueno.regularidad ? { variacion_hora_acostarse_min: r0(R.sueno.regularidad.acostarse), variacion_hora_despertar_min: r0(R.sueno.regularidad.despertar) } : {}) } : { noches: 0 },
+      composicion_bascula: R.composicion.medidas ? { medidas: R.composicion.medidas, grasa_pct_media: r1(R.composicion.grasaPct), masa_grasa_kg_media: r1(R.composicion.grasaKg), masa_magra_kg_media: r1(R.composicion.magraKg), musculo_kg_media: r1(R.composicion.musculoKg) } : { medidas: 0 },
       peso: { media_semana_kg: r1(R.peso.media), media_semana_anterior_kg: r1(R.peso.mediaAnterior), cambio_kg: R.peso.cambio != null ? Math.round(R.peso.cambio * 100) / 100 : null,
         tendencia_kg_semana: R.peso.kgSemana != null ? Math.round(R.peso.kgSemana * 100) / 100 : null }
     },
@@ -188,11 +196,12 @@ export function textoSemana(e) {
   L.push(`Comida (${r.comida.dias_registrados} días): ${r.comida.kcal_media ?? "—"} kcal, P ${r.comida.prot_media_g ?? "—"} g (${r.comida.prot_g_kg ?? "—"} g/kg), H ${r.comida.hid_media_g ?? "—"} g, G ${r.comida.gra_media_g ?? "—"} g, F ${r.comida.fib_media_g ?? "—"} g; ${r.comida.dias_dentro_10pct} días dentro del ±10 %.`);
   L.push(`Actividad: ${r.actividad.pasos_media ?? "—"} pasos de media (${r.actividad.dias_objetivo_pasos}/${r.actividad.dias_con_pasos} días con objetivo), cardio ${r.actividad.cardio_sesiones} sesiones / ${r.actividad.cardio_min} min. Gasto medio ${r.actividad.gasto_medio_kcal ?? "—"} kcal, balance medio ${r.actividad.balance_medio_kcal ?? "—"} kcal.`);
   if (r.sueno.noches) L.push(`Sueño (${r.sueno.noches} noches): ${r.sueno.media_h} h de media, ${r.sueno.noches_con_objetivo} noches con ${r.sueno.objetivo_h} h o más${r.sueno.fases_media_min ? `; fases medias: profundo ${r.sueno.fases_media_min.profundo} min, ligero ${r.sueno.fases_media_min.ligero}, REM ${r.sueno.fases_media_min.rem}, despierto ${r.sueno.fases_media_min.despierto}` : ""}${r.sueno.variacion_hora_acostarse_min != null ? `; la hora de acostarse varía ±${r.sueno.variacion_hora_acostarse_min} min` : ""}.`);
+  if (r.composicion_bascula.medidas) { const c = r.composicion_bascula; L.push(`Báscula (${c.medidas} medidas, estimación): grasa ${c.grasa_pct_media ?? "—"} %, masa grasa ${c.masa_grasa_kg_media ?? "—"} kg, masa magra ${c.masa_magra_kg_media ?? "—"} kg, músculo ${c.musculo_kg_media ?? "—"} kg.`); }
   L.push(`Peso: media ${r.peso.media_semana_kg ?? "—"} kg (semana anterior ${r.peso.media_semana_anterior_kg ?? "—"}), cambio ${r.peso.cambio_kg ?? "—"} kg, tendencia ${r.peso.tendencia_kg_semana ?? "—"} kg/semana.`);
   L.push(`\n## Días`);
   e.dias.forEach(d => {
     const p = [`### ${d.dia} ${d.fecha}${d.en_curso ? " (en curso, incompleto)" : ""}`];
-    const meta = [d.sueno ? `durmió ${d.sueno.horas} h${d.sueno.acostarse ? ` (${d.sueno.acostarse}–${d.sueno.despertar})` : ""}` : null, d.peso_kg ? `peso ${d.peso_kg} kg` : null, d.pasos ? `${d.pasos} pasos` : null, d.gasto_kcal ? `gasto ${d.gasto_kcal.total} kcal` : null].filter(Boolean);
+    const meta = [d.sueno ? `durmió ${d.sueno.horas} h${d.sueno.acostarse ? ` (${d.sueno.acostarse}–${d.sueno.despertar})` : ""}` : null, d.peso_kg ? `peso ${d.peso_kg} kg${d.grasa_pct_bascula ? ` (grasa ${d.grasa_pct_bascula} %)` : ""}${d.musculo_kg_bascula ? ` (músculo ${d.musculo_kg_bascula} kg)` : ""}` : d.grasa_pct_bascula ? `grasa ${d.grasa_pct_bascula} %` : null, d.pasos ? `${d.pasos} pasos` : null, d.gasto_kcal ? `gasto ${d.gasto_kcal.total} kcal` : null].filter(Boolean);
     if (meta.length) p.push(meta.join(" · "));
     if (d.cardio) p.push(`Cardio: ${d.cardio.join("; ")}`);
     if (d.entreno) p.push(`Entreno (${d.entreno.volumen_kg} kg): ${d.entreno.ejercicios.join(" | ")}`);

@@ -76,5 +76,14 @@ ok(!cal2.listo && cal2.diasComida === 8, "días incompletos fuera: " + cal2.dias
   ok(A.cardioPasos({ tipo: "carrera", min: 30, km: 5, llevaba: false }, 175) === 0, "sin reloj, no se descuentan");
   ok(A.cardioKcal({ tipo: "cinta", min: 30, velocidad: 9 }, 70) === A.cardioKcal({ tipo: "carrera", min: 30, velocidad: 9 }, 70), "andar a más de 8 km/h sigue usando la de carrera");
 }
+// Composición corporal (báscula)
+{
+  const ds = [{ fecha: "2026-10-01", peso: 64, grasaPct: 15 }, { fecha: "2026-10-02", grasaPct: 16 }, { fecha: "2026-10-03", peso: 63, musculoKg: 50 }, { fecha: "2026-10-04", peso: 63.5 }];
+  const c = A.composiciones(ds);
+  ok(c.length === 3 && Math.abs(c[0].grasaKg - 9.6) < 1e-9 && Math.abs(c[0].magraKg - 54.4) < 1e-9 && c[1].grasaKg === null && c[2].musculoKg === 50, "composiciones");
+  const R = A.resumenComposicion([...ds, { fecha: "2026-09-01", peso: 65, grasaPct: 17 }], "2026-10-04", 28);
+  ok(R.actual.n === 3 && R.actual.grasaPct === 15.5 && R.anterior.n === 1 && Math.abs(R.cambio.grasaPct + 1.5) < 1e-9, "resumen 4 semanas: " + JSON.stringify(R.cambio));
+  ok(A.mediaMovilDe(c, "grasaPct", 7).map(x => x.media).join() === "15,15.5", "media móvil de grasa");
+}
 console.log(fallos ? `${fallos} FALLOS` : "TODO CORRECTO");
 process.exit(fallos ? 1 : 0);
