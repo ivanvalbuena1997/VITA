@@ -254,3 +254,38 @@ export function resumenComposicion(dias, hasta, ventana = 28) {
 }
 /* Media móvil de los últimos n registros de un campo */
 export const mediaMovilDe = (lista, k, n = 7) => mediaMovil(lista.filter(x => x[k] != null).map(x => ({ fecha: x.fecha, peso: x[k] })), n);
+
+/* ---------- medidas corporales (cinta métrica, cm) ----------
+   dias[].medidas = { antebrazoD, antebrazoI, brazoD, brazoI, pecho, hombros,
+   cintura, cadera, musloD, musloI, gemeloD, gemeloI }. Todas opcionales.
+   D = lado derecho, I = izquierdo. El brazo se mide contraído. */
+export const MEDIDAS = [
+  { k: "antebrazo", n: "Antebrazo", par: true, rango: [15, 60], como: "Parte más ancha, brazo relajado y mano abierta." },
+  { k: "brazo", n: "Bíceps / tríceps", par: true, rango: [15, 70], como: "Contraído: codo flexionado y bíceps apretado, en la parte más ancha." },
+  { k: "pecho", n: "Pecho", par: false, rango: [50, 200], como: "A la altura de los pezones, brazos relajados, tras soltar el aire." },
+  { k: "hombros", n: "Pecho + hombros", par: false, rango: [60, 220], como: "Contorno por la parte más ancha de los hombros (deltoides), brazos relajados." },
+  { k: "cintura", n: "Cintura", par: false, rango: [40, 200], como: "A la altura del ombligo, relajado, tras soltar el aire." },
+  { k: "cadera", n: "Cadera", par: false, rango: [50, 200], como: "Parte más ancha de los glúteos, pies juntos." },
+  { k: "muslo", n: "Cuádriceps", par: true, rango: [25, 100], como: "Parte más ancha del muslo, de pie y relajado." },
+  { k: "gemelo", n: "Gemelo", par: true, rango: [20, 70], como: "Parte más ancha, de pie con el peso repartido." }
+];
+/* Campos guardados de una medida: los pares llevan D e I */
+export const camposMedida = m => m.par ? [m.k + "D", m.k + "I"] : [m.k];
+export const CAMPOS_MEDIDAS = MEDIDAS.flatMap(camposMedida);
+export const medidaDe = campo => MEDIDAS.find(m => camposMedida(m).includes(campo));
+/* Serie de un campo: [{ fecha, v }] ordenada */
+export function serieMedida(dias, campo) {
+  return dias.filter(d => d.medidas && n0(d.medidas[campo])).map(d => ({ fecha: d.fecha, v: n0(d.medidas[campo]) })).sort((a, b) => a.fecha < b.fecha ? -1 : 1);
+}
+/* Última medida de cada campo, la anterior y la primera desde «desde» */
+export function resumenMedidas(dias, desde = null) {
+  const out = {};
+  CAMPOS_MEDIDAS.forEach(c => {
+    const s = serieMedida(dias, c); if (!s.length) return;
+    const ult = s[s.length - 1], ant = s.length > 1 ? s[s.length - 2] : null;
+    const enRango = desde ? s.filter(x => x.fecha >= desde) : s;
+    out[c] = { ultima: ult, anterior: ant, cambio: ant ? ult.v - ant.v : null,
+      primeraRango: enRango.length > 1 ? enRango[0] : null, cambioRango: enRango.length > 1 ? ult.v - enRango[0].v : null, n: s.length };
+  });
+  return out;
+}

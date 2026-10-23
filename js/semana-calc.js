@@ -130,6 +130,7 @@ export function exportarSemana(lunes, datos, { version, hoy } = {}) {
     if (d.peso) o.peso_kg = d.peso;
     if (d.grasaPct) o.grasa_pct_bascula = d.grasaPct;
     if (d.musculoKg) o.musculo_kg_bascula = d.musculoKg;
+    if (d.medidas && Object.keys(d.medidas).length) o.medidas_cm = { ...d.medidas };
     if (d.pasos) o.pasos = d.pasos;
     if (d.cardio && d.cardio.length) o.cardio = d.cardio.map(c => A.esCinta(c)
       ? `${c.tipo === "carrera" ? "correr en cinta" : "andar en cinta"} ${r1(A.cardioMin(c))} min a ${r1(A.velocidadCinta(c))} km/h y ${c.inclinacion || 0} %${c.km ? ` (${c.km} km)` : ""}`
@@ -156,6 +157,7 @@ export function exportarSemana(lunes, datos, { version, hoy } = {}) {
       "Pesos de entreno: con barra el TOTAL (barra + discos); con mancuernas el de UNA; los unilaterales son por lado. Series a RIR 1-2.",
       "Comida: los alimentos con factor de cocción van en crudo con su equivalente hecho entre paréntesis; 'fuera' son estimaciones a ojo.",
       "Sueño: cada noche va en el día en que te despiertas; horas dormidas sin contar los ratos despierto.",
+      "Medidas corporales en cm con cinta métrica (D = lado derecho, I = izquierdo; brazo contraído; hombros = contorno de pecho + hombros).",
       "Grasa y masa muscular vienen de una báscula de bioimpedancia doméstica: son estimaciones con mucho error en un día suelto; valóralas solo como tendencia de varias semanas.",
       "Un día sin comida, pasos, sueño o peso significa 'sin apuntar', no cero. Un día con en_curso=true es hoy y aún no ha terminado: no cuenta en las medias.",
       `Gasto: estimación (basal Mifflin-St Jeor + actividad ACSM neta + digestión ${aj.gasto.digestionPct ?? 10} % de lo comido)${R.actividad.calibrado ? `, multiplicado por ${R.actividad.factor.toFixed(2)} según la evolución real del peso` : ", sin calibrar con el peso todavía (la fórmula suele quedarse corta)"}.`
@@ -203,6 +205,7 @@ export function textoSemana(e) {
     const p = [`### ${d.dia} ${d.fecha}${d.en_curso ? " (en curso, incompleto)" : ""}`];
     const meta = [d.sueno ? `durmió ${d.sueno.horas} h${d.sueno.acostarse ? ` (${d.sueno.acostarse}–${d.sueno.despertar})` : ""}` : null, d.peso_kg ? `peso ${d.peso_kg} kg${d.grasa_pct_bascula ? ` (grasa ${d.grasa_pct_bascula} %)` : ""}${d.musculo_kg_bascula ? ` (músculo ${d.musculo_kg_bascula} kg)` : ""}` : d.grasa_pct_bascula ? `grasa ${d.grasa_pct_bascula} %` : null, d.pasos ? `${d.pasos} pasos` : null, d.gasto_kcal ? `gasto ${d.gasto_kcal.total} kcal` : null].filter(Boolean);
     if (meta.length) p.push(meta.join(" · "));
+    if (d.medidas_cm) p.push(`Medidas (cm): ${Object.entries(d.medidas_cm).map(([k, v]) => `${k} ${v}`).join(", ")}`);
     if (d.cardio) p.push(`Cardio: ${d.cardio.join("; ")}`);
     if (d.entreno) p.push(`Entreno (${d.entreno.volumen_kg} kg): ${d.entreno.ejercicios.join(" | ")}`);
     if (d.comida) {

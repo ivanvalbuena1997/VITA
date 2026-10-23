@@ -12,7 +12,7 @@ import { relacionSueno } from "./semana-calc.js";
 let C = null;
 export function init(ctx) { C = ctx; }
 
-const P = { sub: "dia", fecha: hoyISO(), rango: { pasos: "1m", sueno: "1m", peso: "3m", gasto: "1m" }, cardio: null, sueno: false };
+const P = { sub: "dia", fecha: hoyISO(), rango: { pasos: "1m", sueno: "1m", peso: "3m", gasto: "1m" }, cardio: null, sueno: false, medidasAbiertas: false, medidaGraf: "cintura" };
 const RANGOS = { "7d": 7, "1m": 30, "3m": 91, "6m": 182, "1y": 365 };
 const RANGO_TXT = { "7d": "7 días", "1m": "1 mes", "3m": "3 meses", "6m": "6 meses", "1y": "1 año" };
 
@@ -36,7 +36,7 @@ function ctxGasto() {
 }
 /* Guarda solo los campos que cambian (null = quitar el campo). Si el día se
    queda sin datos, se borra. Así no se pisa lo que escriba la app compañera. */
-const DATOS_DIA = ["pasos", "peso", "cardio", "sueno", "grasaPct", "musculoKg"];
+const DATOS_DIA = ["pasos", "peso", "cardio", "sueno", "grasaPct", "musculoKg", "medidas"];
 function guardarDia(f, campos) {
   let d = diaDe(f);
   if (!d) { d = { fecha: f }; C.S.dias.push(d); }
@@ -152,7 +152,8 @@ function vDia() {
     </div>
     ${d.grasaPct && d.peso ? `<p class="muted" style="margin:0">Masa grasa <b>${f1(d.peso * d.grasaPct / 100)} kg</b> · masa magra (todo lo que no es grasa) <b>${f1(d.peso * (1 - d.grasaPct / 100))} kg</b>.</p>` : ""}
     ${d.grasaPct && !d.peso ? `<p class="muted" style="margin:0">Apunta también el peso de hoy para calcular la masa grasa y la magra.</p>` : ""}
-    <p class="muted" style="margin:0">Estimaciones de la báscula: un día suelto puede fallar varios puntos, sobre todo por el agua del cuerpo. Mide siempre igual (por la mañana, en ayunas, tras orinar, descalzo y con los pies secos) y fíjate en la tendencia de varias semanas (Progreso → Peso).</p></div>
+    <p class="muted" style="margin:0">Estimaciones de la báscula: un día suelto puede fallar varios puntos, sobre todo por el agua del cuerpo. Mide siempre igual (por la mañana, en ayunas, tras orinar, descalzo y con los pies secos) y fíjate en la tendencia de varias semanas (Progreso → Peso).</p>
+    ${bloqueMedidas(d)}</div>
   <div class="card" data-sec="d-cardio"><p class="card-title">Cardio</p>
     ${(d.cardio || []).map((c, i) => `<button class="item" data-a="cardio-editar" data-i="${i}"><span class="item-main"><b>${TIPO_CARDIO[c.tipo] || "Cardio"} · ${f1(A.cardioMin(c))} min</b>
       <span class="muted">${A.esCinta(c) ? `${f1(A.velocidadCinta(c))} km/h · ${f1(c.inclinacion)} %${c.km ? ` · ${f2(c.km)} km` : ""}${c.pasosReloj ? ` · ${f0(c.pasosReloj)} pasos` : c.tipo === "carrera" && c.llevaba !== false ? ` · ≈ ${f0(A.cardioPasos(c))} pasos (estimados)` : ""}${c.llevaba === false ? " · sin reloj" : ""}` : (c.vatios ? `${f0(c.vatios)} W` : `intensidad ${c.intensidad || "moderada"}`)}</span></span>
@@ -172,6 +173,33 @@ function vDia() {
       <div class="row"><span>Balance</span><span style="color:${bal > 0 ? "var(--warn)" : "var(--ok)"}"><b class="mono">${bal > 0 ? "+" : "−"}${f0(Math.abs(bal))}</b> kcal ${bal > 0 ? "superávit" : "déficit"}</span></div>`; })() : ""}
     <p class="muted" style="margin:0">Es una estimación (error típico de un 10–20 %). ${usarCal ? "Se corrige con la evolución real de tu peso." : "Cuando haya pesajes suficientes se calibrará con tu peso real (Progreso → Gasto)."}</p>`}</div>`;
 }
+/* ---------- medidas corporales ----------
+   Icono: una figura de frente con la cinta (en color) en la zona que se mide.
+   En las medidas de lado se marca un lado de la figura. */
+const CINTA = {
+  antebrazo: "M4.6 18.4h4.4", brazo: "M6.6 12.6h4.2", pecho: "M10.4 12h11.2", hombros: "M6.8 10.2q9.2-2.6 18.4 0",
+  cintura: "M11.4 16.6h9.2", cadera: "M10.8 20.4h10.4", muslo: "M10.9 22.8h4", gemelo: "M10.8 27.6h3.6"
+};
+export function iconoMedida(k, tam = 38) {
+  return `<svg class="ico-medida" width="${tam}" height="${tam}" viewBox="0 0 32 32" aria-hidden="true" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <g stroke="var(--mute)" stroke-width="1.3"><circle cx="16" cy="4.6" r="2.6"/><path d="M10 9h12l-1.5 10h-9z"/>
+    <path d="M10 9.4 7.6 15.4 6.6 21M22 9.4l2.4 6 1 5.6M13 19l-.5 6v6M19 19l.5 6v6"/></g>
+    <path d="${CINTA[k] || ""}" stroke="var(--acc)" stroke-width="2.4"/></svg>`;
+}
+const fMed = v => v == null ? "" : String(v).replace(".", ",");
+function bloqueMedidas(d) {
+  const m = d.medidas || {}, n = A.CAMPOS_MEDIDAS.filter(c => m[c] > 0).length;
+  const abierto = P.medidasAbiertas || n > 0;
+  return `<div class="sub-label">Medidas corporales (cm) · opcional</div>
+    ${abierto ? `<div class="medidas">${A.MEDIDAS.map(x => `<div class="medida">
+        ${iconoMedida(x.k)}
+        <div class="medida-nom"><b>${x.n}</b><span class="muted">${x.como}</span></div>
+        <div class="medida-val">${A.camposMedida(x).map(c => `<label class="medida-campo">${x.par ? `<span>${c.endsWith("D") ? "D" : "I"}</span>` : ""}<input id="a-med-${c}" data-med="${c}" inputmode="decimal" value="${fMed(m[c])}" placeholder="cm" aria-label="${x.n}${x.par ? (c.endsWith("D") ? " derecho" : " izquierdo") : ""} en cm"></label>`).join("")}</div>
+      </div>`).join("")}</div>
+      <p class="muted" style="margin:0">Apunta solo las que midas. D = lado derecho, I = izquierdo. Mide siempre en el mismo punto, por la mañana, con la cinta ajustada sin apretar la piel. La evolución está en Progreso → Peso.</p>`
+    : `<div class="btn-row"><button class="btn sm" data-a="medidas-abrir">${C.icon("mas", 16)}Apuntar medidas</button></div>`}`;
+}
+
 /* ---------- sueño del día (la noche anterior) ---------- */
 const hm = min => `${Math.floor(min / 60)}<small>h</small> ${String(Math.round(min % 60)).padStart(2, "0")}<small>min</small>`;
 const horaDe = iso => iso && /T\d{2}:\d{2}/.test(iso) ? iso.slice(11, 16) : "";
@@ -333,7 +361,31 @@ function vPeso() {
       <div class="stat"><b>${pend != null ? `${pend >= 0 ? "+" : "−"}${f2(Math.abs(pend * 7))}` : "—"}</b><span>kg/semana (4 semanas)</span></div>
     </div>
     <p class="muted" style="margin:0">Peso de cálculo: ${esc(pc.fuente)}. ${pend == null ? "La tendencia necesita al menos 3 pesajes en las últimas 4 semanas." : ""}</p></div>
-  ${tarjetaComposicion(desde, hoy)}`;
+  ${tarjetaComposicion(desde, hoy)}
+  ${tarjetaMedidas(desde)}`;
+}
+/* Medidas corporales: última de cada una con su cambio y la gráfica de la elegida */
+function tarjetaMedidas(desde) {
+  const R = A.resumenMedidas(C.S.dias, desde);
+  const con = A.MEDIDAS.filter(x => A.camposMedida(x).some(c => R[c]));
+  if (!con.length) return `<div class="card" data-sec="w-med"><p class="card-title">Medidas corporales</p>
+    <p class="muted" style="margin:0">Sin medidas apuntadas. Se apuntan en Progreso → Día, en el apartado Peso.</p></div>`;
+  const sel = con.find(x => x.k === P.medidaGraf) || con[0];
+  const cambio = v => v == null ? "" : `<span class="dif">${v > 0 ? "+" : v < 0 ? "−" : "±"}${f1(Math.abs(v))}</span>`;
+  const celda = c => { const r = R[c]; return r ? `<b>${f1(r.ultima.v)}</b> <small class="muted">${esc(corta(r.ultima.fecha))}</small> ${cambio(r.cambio)}` : `<span class="muted">—</span>`; };
+  const ult = k => R[k] && R[k].ultima.v;
+  const icc = ult("cintura") && ult("cadera") ? ult("cintura") / ult("cadera") : null;
+  const series = A.camposMedida(sel).map((c, i) => ({ nombre: sel.par ? (i === 0 ? "Derecho" : "Izquierdo") : sel.n, color: i === 0 ? "var(--acc)" : "var(--gra)",
+    puntos: A.serieMedida(C.S.dias, c).filter(p => p.fecha >= desde).map(p => ({ x: p.fecha, v: p.v })), puntosVisibles: true })).filter(s => s.puntos.length);
+  return `<div class="card" data-sec="w-med"><p class="card-title">Medidas corporales</p>
+    <div class="medidas">${con.map(x => `<button class="medida medida-btn" data-a="medida-graf" data-v="${x.k}" aria-pressed="${x.k === sel.k}">
+      ${iconoMedida(x.k)}<span class="medida-nom"><b>${x.n}</b></span>
+      <span class="medida-res">${x.par ? `<span>D ${celda(x.k + "D")}</span><span>I ${celda(x.k + "I")}</span>` : `<span>${celda(x.k)}</span>`}</span></button>`).join("")}</div>
+    <p class="muted" style="margin:0">Última medida (cm), su fecha y el cambio frente a la anterior. Toca una para ver su evolución.</p>
+    <div class="sub-label">${esc(sel.n)} · ${RANGO_TXT[P.rango.peso].toLowerCase()}</div>
+    ${series.some(s => s.puntos.length) ? lineas(series, { decimales: 1, alto: 170 }) : `<p class="muted" style="margin:0">Sin medidas de ${esc(sel.n.toLowerCase())} en este periodo.</p>`}
+    ${A.camposMedida(sel).map(c => R[c] && R[c].cambioRango != null ? `<div class="row"><span>${esc(sel.n)}${sel.par ? (c.endsWith("D") ? " derecho" : " izquierdo") : ""} en el periodo</span><span>${cambio(R[c].cambioRango)} cm <span class="muted">desde el ${esc(corta(R[c].primeraRango.fecha))}</span></span></div>` : "").join("")}
+    ${icc ? `<div class="row"><span>Cintura / cadera (últimas)</span><span><b>${icc.toFixed(2).replace(".", ",")}</b></span></div>` : ""}</div>`;
 }
 /* Composición corporal de la báscula: tendencia (media de los últimos 7 registros) y medias de 4 semanas */
 function tarjetaComposicion(desde, hoy) {
@@ -418,8 +470,10 @@ export function click(e) {
   const rg = t.closest("[data-arango]"); if (rg) { const [k, v] = rg.dataset.arango.split(":"); P.rango[k] = v; C.render(); return true; }
   const b = t.closest("[data-a]"); if (!b) return false;
   switch (b.dataset.a) {
-    case "dia": P.fecha = sumarDias(P.fecha, +b.dataset.n); if (P.fecha > hoyISO()) P.fecha = hoyISO(); P.cardio = null; P.sueno = false; break;
+    case "dia": P.fecha = sumarDias(P.fecha, +b.dataset.n); if (P.fecha > hoyISO()) P.fecha = hoyISO(); P.cardio = null; P.sueno = false; P.medidasAbiertas = false; break;
     case "hoy": P.fecha = hoyISO(); P.cardio = null; P.sueno = false; break;
+    case "medidas-abrir": P.medidasAbiertas = true; break;
+    case "medida-graf": P.medidaGraf = b.dataset.v; break;
     case "pasos-hc": guardarDia(P.fecha, { pasos: null, pasosFuente: null }); C.toast("Se rellenarán en la próxima sincronización."); break;
     case "sueno-editar": P.sueno = true; break;
     case "sueno-cancelar": P.sueno = false; break;
@@ -446,6 +500,14 @@ export function change(t) {
     const v = Math.round(num(t.value) || 0);
     if (v > 150000) { C.toast("Esos pasos no parecen correctos."); return true; }
     guardarDia(P.fecha, v > 0 ? { pasos: v, pasosFuente: "manual" } : { pasos: null, pasosFuente: null }); C.render(); return true;
+  }
+  if (t.dataset && t.dataset.med) {
+    const c = t.dataset.med, x = A.medidaDe(c), v = num(t.value);
+    if (!x) return true;
+    if (v != null && v > 0 && (v < x.rango[0] || v > x.rango[1])) { C.toast(`${x.n}: entre ${x.rango[0]} y ${x.rango[1]} cm.`); return true; }
+    const med = { ...((diaDe(P.fecha) || {}).medidas || {}) };
+    if (v > 0) med[c] = Math.round(v * 10) / 10; else delete med[c];
+    guardarDia(P.fecha, { medidas: Object.keys(med).length ? med : null }); C.render(); return true;
   }
   if (t.id === "a-grasa" || t.id === "a-musculo") {
     const k = t.id === "a-grasa" ? "grasaPct" : "musculoKg", v = num(t.value), [lo, hi] = A.LIMITES_COMPOSICION[k];

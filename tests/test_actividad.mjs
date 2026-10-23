@@ -85,5 +85,14 @@ ok(!cal2.listo && cal2.diasComida === 8, "días incompletos fuera: " + cal2.dias
   ok(R.actual.n === 3 && R.actual.grasaPct === 15.5 && R.anterior.n === 1 && Math.abs(R.cambio.grasaPct + 1.5) < 1e-9, "resumen 4 semanas: " + JSON.stringify(R.cambio));
   ok(A.mediaMovilDe(c, "grasaPct", 7).map(x => x.media).join() === "15,15.5", "media móvil de grasa");
 }
+// Medidas corporales
+{
+  ok(A.CAMPOS_MEDIDAS.length === 12 && A.medidaDe("brazoI").k === "brazo" && A.medidaDe("cintura").par === false, "campos de medidas");
+  const ds = [{ fecha: "2026-10-01", medidas: { cintura: 80, brazoD: 34 } }, { fecha: "2026-10-08", medidas: { cintura: 79.5 } }, { fecha: "2026-10-15", medidas: { cintura: 79, brazoD: 34.5, brazoI: 34 } }, { fecha: "2026-10-16", peso: 64 }];
+  const R = A.resumenMedidas(ds, "2026-10-05");
+  ok(R.cintura.ultima.v === 79 && R.cintura.cambio === -0.5 && R.cintura.cambioRango === -0.5 && R.cintura.n === 3, "cintura: " + JSON.stringify(R.cintura));
+  ok(R.brazoD.cambio === 0.5 && R.brazoD.cambioRango === null && R.brazoI.anterior === null, "brazo");
+  ok(!R.pecho && A.serieMedida(ds, "cintura").length === 3, "series");
+}
 console.log(fallos ? `${fallos} FALLOS` : "TODO CORRECTO");
 process.exit(fallos ? 1 : 0);
