@@ -926,14 +926,22 @@ export function input(t) {
   const s = sesionDe(E.fecha); if (!s) return true;
   const st = s.ejercicios[+i] && s.ejercicios[+i].series[+j];
   if (!st) { C.render(); return true; }          // la sesión cambió en otro dispositivo: se repinta
+  const antes = completa(st);
   st[campo] = num(t.value);
+  // La serie acaba de completarse (antes le faltaba peso o reps): el descanso arranca al salir del campo
+  if (!antes && completa(st)) porDescansar = { fecha: s.fecha, i: +i, j: +j };
+  else if (antes && !completa(st) && porDescansar && porDescansar.fecha === s.fecha && porDescansar.i === +i && porDescansar.j === +j) porDescansar = null;
   t.closest(".serie").classList.toggle("ok", completa(st));
   programarGuardado(s, false);
   return true;
 }
 
-/* Al terminar de escribir un campo: guarda, comprueba récord y arranca el descanso */
-const yaDescansado = new Set();
+/* Al terminar de escribir un campo: guarda, comprueba récord y arranca el descanso.
+   El descanso arranca cuando una serie PASA a estar completa (no al corregir una
+   ya hecha). Antes se recordaba por posición (ejercicio n.º i, serie n.º j) y, al
+   borrar un ejercicio o una serie, los que ocupaban después esa posición ya no lo
+   arrancaban. */
+let porDescansar = null;
 export function change(t) {
   if (t.dataset && t.dataset.pldn != null) {
     const p = planSel(); if (!p) return true;
@@ -947,8 +955,7 @@ export function change(t) {
   if (!st) { C.render(); return true; }
   guardarYa();
   if (completa(st)) {
-    const clave = `${s.fecha}|${i}|${j}`;
-    if (!yaDescansado.has(clave)) { yaDescansado.add(clave); iniciarDescanso(ej.nombre); }
+    if (porDescansar && porDescansar.fecha === s.fecha && porDescansar.i === i && porDescansar.j === j) { porDescansar = null; iniciarDescanso(ej.nombre); }
     const ref = mejorPrevio(ej.ejercicioId, s.fecha);
     if (ref.e1 > 0 && e1rm(st.peso, st.reps) > ref.e1 * 1.001)
       C.toast(`Récord en ${ej.nombre}: ${fmtNum(st.peso)} kg × ${st.reps} (1RM estimado ${C.nf(Math.round(e1rm(st.peso, st.reps)))} kg, antes ${C.nf(Math.round(ref.e1))}).`, 6000, "rec");
