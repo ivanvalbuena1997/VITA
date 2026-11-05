@@ -50,6 +50,16 @@ v = B.validar(fila("menu", { nombre: "Menú prueba", comidas: { desayuno: [{ id:
 ok(v.ok && v.cambios.col === "menus" && v.cambios.doc.comidas.desayuno.length === 1 && v.cambios.doc.comidas.comida.length === 0, "menú");
 ok(!B.validar(fila("menu", { nombre: "", comidas: {} }), S).ok, "menú sin nombre");
 ok(!B.validar(fila("loquesea", {}), S).ok, "tipo desconocido");
+// alimento nuevo
+v = B.validar(fila("alimento", { nombre: "Yogur griego natural 0% Hacendado", super: "mercadona", kcal: 57, prot: 10, hid: 4, gra: 0, fib: 0, precio: 3.2 }), S);
+ok(v.ok && v.cambios.col === "alimentos" && v.cambios.doc.tipo === "basico" && v.cambios.doc.unidad === "g" && v.cambios.doc.super === "mercadona" && v.avisos.length === 0, "alimento: " + (v.error || JSON.stringify(v.avisos)));
+v = B.validar(fila("alimento", { nombre: "Arroz redondo", super: "nope", kcal: 350, prot: 7, hid: 78, gra: 1, factor: 2.6 }), S);
+ok(v.ok && v.cambios.doc.super === "generico" && v.cambios.doc.factor === 2.6, "super desconocido → genérico");
+ok(B.validar(fila("alimento", { nombre: "X", kcal: 300, prot: 10, hid: 10, gra: 10 }), S).avisos.some(a => /macros/.test(a)), "aviso de descuadre");
+ok(B.validar(fila("alimento", { nombre: prod.nombre, kcal: prod.kcal, prot: prod.prot, hid: prod.hid, gra: prod.gra }), S).avisos.some(a => /Ya tienes/.test(a)), "aviso de parecido");
+ok(!B.validar(fila("alimento", { nombre: "Malo", kcal: 100, prot: 60, hid: 50, gra: 10 }), S).ok, "macros > 100 g");
+ok(!B.validar(fila("alimento", { nombre: "Sin kcal", prot: 1, hid: 1, gra: 1 }), S).ok, "falta kcal");
+ok(!B.validar(fila("alimento", { kcal: 100, prot: 1, hid: 1, gra: 1 }), S).ok, "sin nombre");
 console.log(v.lineas.join(" | "));
 console.log(fallos ? `${fallos} FALLOS` : "TODO CORRECTO");
 process.exit(fallos ? 1 : 0);

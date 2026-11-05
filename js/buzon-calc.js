@@ -9,14 +9,16 @@
    - medidas: { fecha, medidas: { cintura: 80, brazoD: 34.5, … } }  (cm)
    - comida:  { fecha, comida: desayuno|almuerzo|comida|merienda|cena, modo?: "anadir"|"sustituir",
                 items: [ { id, g } | { libre: true, nombre, kcal, prot?, hid?, gra?, fib? } ] }
-   - menu:    { nombre, comidas: { desayuno: [items], … } } */
+   - menu:    { nombre, comidas: { desayuno: [items], … } }
+   - alimento: { nombre, super?, unidad?: "g"|"ml", kcal, prot, hid, gra, fib?, precio? (€/kg o €/L), factor? }
+               producto nuevo del catálogo; valores por 100 g o 100 ml */
 
-import { COMIDAS } from "./model.js";
+import { COMIDAS, SUPERS } from "./model.js";
 import * as A from "./actividad-calc.js";
 import * as K from "./comida-calc.js";
 
 export const CABECERA = ["id", "escrito", "tipo", "datos (JSON)", "nota", "estado", "detalle"];
-export const TIPOS = { pesaje: "Pesaje", medidas: "Medidas", comida: "Comida del diario", menu: "Menú" };
+export const TIPOS = { pesaje: "Pesaje", medidas: "Medidas", comida: "Comida del diario", menu: "Menú", alimento: "Alimento nuevo" };
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 const n = v => { const x = typeof v === "number" ? v : parseFloat(String(v ?? "").replace(",", ".")); return Number.isFinite(x) ? x : null; };
 const r1 = v => Math.round(v * 10) / 10;
@@ -39,7 +41,8 @@ export function validar(e, S) {
   let d;
   try { d = JSON.parse(e.datosTxt); } catch { return mal("Los datos no son un JSON válido."); }
   if (!d || typeof d !== "object") return mal("Faltan los datos.");
-  if (!TIPOS[e.tipo]) return mal("Tipo desconocido (válidos: pesaje, medidas, comida, menu).");
+  if (!TIPOS[e.tipo]) return mal("Tipo desconocido (válidos: pesaje, medidas, comida, menu, alimento).");
+  if (e.tipo === "alimento") return validarAlimento(d, S, base, mal);
 
   if (e.tipo === "pesaje" || e.tipo === "medidas" || e.tipo === "comida") {
     if (!FECHA.test(d.fecha || "")) return mal("Falta la fecha (AAAA-MM-DD).");
@@ -135,4 +138,32 @@ export function validar(e, S) {
   base.lineas.push(`Total: ${Math.round(t.kcal)} kcal · P ${f1(t.prot)} · H ${f1(t.hid)} · G ${f1(t.gra)} g`);
   if (S.menus.some(m => m.nombre.trim().toLowerCase() === nombre.toLowerCase())) base.avisos.push("Ya tienes un menú con ese nombre: se creará otro aparte.");
   return { ...base, ok: true, cambios: { col: "menus", nuevo: true, doc: { nombre, comidas } } };
+}
+
+/* Producto nuevo para el catálogo (Comida → Alimentos) */
+function validarAlimento(d, S, base, mal) {
+  const nombre = String(d.nombre || "").trim().replace(/\s+/g, " ").slice(0, 80);
+  if (!nombre) return mal("El alimento necesita nombre.");
+  const unidad = d.unidad === "ml" ? "ml" : "g", u100 = `100 ${unidad}`;
+  const sup = SUPERS.includes(d.super) ? d.super : "generico";
+  const v = {};
+  for (const k of ["kcal", "prot", "hid", "gra", "fib"]) {
+    const x = d[k] == null && k === "fib" ? 0 : n(d[k]);
+    if (x == null) return mal(`Falta ${k === "kcal" ? "las kcal" : k} por ${u100}.`);
+    if (x < 0 || (k === "kcal" ? x > 900 : x > 100)) return mal(`Valor imposible: ${k} = ${x} por ${u100}.`);
+    v[k] = r1(x);
+  }
+  if (v.prot + v.hid + v.gra > 100.5) return mal(`Proteína + hidratos + grasas suman más de 100 g por ${u100}.`);
+  const precio = d.precio == null ? 0 : n(d.precio);
+  if (precio == null || precio < 0 || precio > 500) return mal("Precio no válido (€/kg o €/L).");
+  const factor = d.factor == null ? 0 : n(d.factor);
+  if (factor == null || factor < 0 || factor > 5) return mal("Factor de cocción no válido (0 = no se cocina; p. ej. arroz ≈ 2,5–3).");
+  base.titulo += ` · «${nombre}»`;
+  base.lineas.push(`Por ${u100}: ${Math.round(v.kcal)} kcal · P ${f1(v.prot)} · H ${f1(v.hid)} · G ${f1(v.gra)} · fibra ${f1(v.fib)} g`);
+  base.lineas.push(`Súper: ${sup}${precio ? ` · ${f1(precio)} €/${unidad === "ml" ? "L" : "kg"}` : " · sin precio"}${factor ? ` · factor de cocción ${f1(factor)} (gramos en crudo)` : ""}`);
+  const calc = K.kcalDeMacros(v);
+  if (v.kcal > 0 && calc > 0 && Math.abs(calc - v.kcal) > Math.max(15, v.kcal * 0.12)) base.avisos.push(`De los macros salen unas ${Math.round(calc)} kcal, no ${Math.round(v.kcal)}: revisa la etiqueta.`);
+  const par = K.parecidos(nombre, S.alimentos, null);
+  if (par.length) base.avisos.push(`Ya tienes «${par[0].nombre}»: se creará otro aparte.`);
+  return { ...base, ok: true, cambios: { col: "alimentos", nuevo: true, doc: { tipo: "basico", nombre, super: sup, unidad, precio, factor, ...v } } };
 }

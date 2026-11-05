@@ -66,7 +66,7 @@ async function guardar(item) {
   const c = v.cambios, uid = C.S.user.uid;
   if (c.col === "dias") await C.DB.actualizarDoc(uid, "dias", c.id, c.campos);
   else if (c.col === "diario") await C.DB.guardarDoc(uid, "diario", c.id, JSON.parse(JSON.stringify(c.doc)));
-  else if (c.col === "menus") { const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7); await C.DB.guardarDoc(uid, "menus", id, { id, ...c.doc }); }
+  else if (c.col === "menus" || c.col === "alimentos") { const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7); await C.DB.guardarDoc(uid, c.col, id, { id, ...c.doc }); }
   await C.DR.marcarFila(aj(), item.e.fila, `aplicado ${hoyISO()}`, v.titulo);
   N.entradas = N.entradas.filter(x => x !== item);
 }
@@ -109,7 +109,7 @@ export function vAjustes() {
     </div>
     ${N.error ? `<p class="err" style="margin:0">${C.esc(N.error)}</p>` : ""}
     <p class="muted" style="margin:0">Se guarda en la carpeta «V.I.T.A.» de tu Drive: «vita-copia-ultima.json» y las ${8} últimas con fecha. V.I.T.A. solo puede ver los archivos que ella crea, no el resto de tu Drive. Google pide un toque tuyo cada vez (el permiso dura alrededor de una hora), por eso te avisa en Hoy cada ${cada()} días.</p>
-    ${N.entradas ? vBuzon() : con ? `<p class="muted" style="margin:0">Buzón: la hoja «V.I.T.A. buzón» de esa carpeta. Ahí Claude puede dejarte pesajes, medidas, comidas y menús; aquí los revisas antes de que se guarden.</p>` : ""}
+    ${N.entradas ? vBuzon() : con ? `<p class="muted" style="margin:0">Buzón: la hoja «V.I.T.A. buzón» de esa carpeta. Ahí Claude puede dejarte pesajes, medidas, comidas, menús y alimentos nuevos; aquí los revisas antes de que se guarden.</p>` : ""}
   </div>`;
 }
 function vBuzon() {
