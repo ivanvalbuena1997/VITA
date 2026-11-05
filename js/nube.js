@@ -13,7 +13,10 @@ const aj = () => { const a = C.S.ajustes.app; a.drive = a.drive || {}; return a.
 const cada = () => aj().cadaDias || 7;
 const diasDesde = iso => Math.floor((new Date(hoyISO() + "T00:00:00") - new Date(iso + "T00:00:00")) / 86400000);
 export const usaDrive = () => !!aj().carpeta;
-export const copiaDriveDebida = () => usaDrive() && (!aj().ultimaSubida || diasDesde(aj().ultimaSubida) >= cada());
+/* La última copia: la de V.I.T.A. o la que sube NEXO desde el móvil (app.drive.ultimaSubidaNexo), la más reciente */
+const ultimaCopiaDrive = () => [aj().ultimaSubida, aj().ultimaSubidaNexo].filter(Boolean).sort().pop() || null;
+const deNexo = () => !!aj().ultimaSubidaNexo && ultimaCopiaDrive() === aj().ultimaSubidaNexo && aj().ultimaSubidaNexo !== aj().ultimaSubida;
+export const copiaDriveDebida = () => usaDrive() && (!ultimaCopiaDrive() || diasDesde(ultimaCopiaDrive()) >= cada());
 const ctxValidar = () => ({ dias: C.S.dias, diario: C.S.diario, alimentos: C.S.alimentos, menus: C.S.menus, hoy: hoyISO() });
 const fallo = e => { N.ocupado = null; N.error = C.mensajeError(e); C.toast(N.error, 7000); C.render(); };
 
@@ -89,7 +92,7 @@ function descartar(fila) {
 /* ---------- vistas ---------- */
 export function avisoHoy() {
   if (!copiaDriveDebida() && !(N.entradas && N.entradas.length)) return "";
-  const u = aj().ultimaSubida, n = N.entradas ? N.entradas.length : 0;
+  const u = ultimaCopiaDrive(), n = N.entradas ? N.entradas.length : 0;
   return `<div class="notice">${C.icon("nube", 20, "var(--acc)")}<div style="flex:1">
     ${copiaDriveDebida() ? `<div>${u ? `Tu última copia en Drive es de hace ${diasDesde(u)} días.` : "Aún no has guardado ninguna copia en Drive."} Toca subirla (cada ${cada()} días).</div>` : ""}
     ${n ? `<div>Tienes ${n} ${n === 1 ? "entrada" : "entradas"} en el buzón por revisar.</div>` : ""}
@@ -99,7 +102,7 @@ export function avisoHoy() {
 export function vAjustes() {
   const d = aj(), con = usaDrive();
   return `<div class="card" data-sec="aj-drive" id="aj-drive"><p class="card-title">Google Drive</p>
-    <div class="row"><span>Copia en Drive</span><span>${d.ultimaSubida ? `${C.esc(C.fecha(d.ultimaSubida))}${diasDesde(d.ultimaSubida) >= cada() ? ` <span class="muted">· toca otra</span>` : ""}` : "nunca"}</span></div>
+    <div class="row"><span>Copia en Drive</span><span>${ultimaCopiaDrive() ? `${C.esc(C.fecha(ultimaCopiaDrive()))}${deNexo() ? ` <span class="muted">· desde NEXO</span>` : ""}${diasDesde(ultimaCopiaDrive()) >= cada() ? ` <span class="muted">· toca otra</span>` : ""}` : "nunca"}</span></div>
     <div class="btn-row">
       <button class="btn primary" data-act="drive-copia" ${N.ocupado ? "disabled" : ""}>${N.ocupado === "copia" ? "Subiendo…" : con ? "Guardar copia en Drive" : "Conectar Drive y guardar copia"}</button>
       ${con ? `<button class="btn" data-act="drive-buzon" ${N.ocupado ? "disabled" : ""}>${N.ocupado === "buzon" ? "Leyendo…" : "Revisar el buzón"}</button>` : ""}
