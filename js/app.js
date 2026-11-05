@@ -11,6 +11,7 @@ import * as EN from "./entreno.js";
 import * as CO from "./comida.js";
 import * as AC from "./actividad.js";
 import * as RS from "./resumen.js";
+import * as NB from "./nube.js";
 import { pesoEn } from "./actividad-calc.js";
 import { BASE } from "./comida-base.js";
 import { GOOGLE_CLIENT_ID } from "./config.js";
@@ -19,6 +20,7 @@ import { GOOGLE_CLIENT_ID } from "./config.js";
    Sirve para probar la interfaz; nunca se usa en la app publicada. */
 const MODO_LOCAL = location.hostname === "localhost" && new URLSearchParams(location.search).has("local");
 const DB = MODO_LOCAL ? await import("./db-local.js") : await import("./db.js");
+const DR = MODO_LOCAL ? await import("./drive-local.js") : await import("./drive.js");
 
 const S = {
   user: null, ajustes: null, compra: null,
@@ -258,12 +260,13 @@ function render(forzar = false) {
 
 function vHoy() {
   const out = [`<div class="label">Hoy · ${esc(fecha(hoyISO()))}</div>`];
-  if (copiaPendiente()) {
+  out.push(NB.avisoHoy());
+  if (copiaPendiente() && !NB.usaDrive()) {
     const u = S.ajustes.app.ultimaCopia;
     out.push(`<div class="notice">${icon("aviso", 20, "var(--warn)")}<div style="flex:1">
       <div>${u ? `Han pasado ${diasDesde(u)} días desde tu última copia descargada.` : "Aún no has descargado ninguna copia de seguridad."}</div>
       <div class="muted">Tus datos están en la nube, pero una copia en Drive o en el ordenador es la red de seguridad.</div>
-      <div class="btn-row" style="margin-top:8px"><button class="btn" data-act="copia">Descargar copia</button></div></div></div>`);
+      <div class="btn-row" style="margin-top:8px"><button class="btn primary" data-act="drive-copia">Guardar en Drive</button><button class="btn" data-act="copia">Descargar copia</button></div></div></div>`);
   }
   const pf = S.ajustes.perfil;
   if (hayDatos() && (!pf.nacimiento || !pf.sexo || !pf.altura || !pf.pesoReferencia))
@@ -316,6 +319,7 @@ function vAjustes() {
   ${CO.vAjustes()}
   ${AC.vAjustes()}
   ${EN.vAjustes()}
+  ${NB.vAjustes()}
   <div class="card"><p class="card-title">Datos y copias</p>
     <div class="row"><span>Última copia descargada</span><span>${a.app.ultimaCopia ? esc(fecha(a.app.ultimaCopia)) : "nunca"}</span></div>
     <div class="btn-row">
@@ -422,6 +426,7 @@ document.addEventListener("click", e => {
   const b = e.target.closest("[data-act]");
   if (!b) return;
   const act = b.dataset.act;
+  if (S.cargado && NB.click(b)) return;
   if (act === "salir") { EN.guardarYa(); DB.salir(); }
   if (act === "copia") descargarCopia();
   if (act === "importar") importar();
@@ -468,7 +473,7 @@ async function arrancar() {
   DB.alCambiarUsuario(user => {
     if (pararEscucha) { pararEscucha(); pararEscucha = null; }
     if (!user) { S.user = null; pantallaLogin(); return; }
-    S.user = user; S.cargado = false; esqueleto(); render();
+    S.user = user; S.cargado = false; esqueleto(); render(); DR.preparar();
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().then(v => { S.persistente = v; }).catch(() => {});
     const recibidos = new Set(), delServidor = new Set();
     let baseHecha = false;
@@ -544,8 +549,15 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http") && !MOD
 
 EN.init({ S, DB, render: () => render(true), toast, esc, nf, fecha, icon, mensajeError, confirmar: (...a) => CO.confirmar(...a) });
 AC.init({ S, DB, render: () => render(true), toast, esc, nf, fecha, icon, mensajeError, confirmar: (...a) => CO.confirmar(...a), vSemana: () => RS.vSemana() });
-RS.init({ S, render: () => render(true), toast, esc, fecha, icon,
-  irA: (tab, sub) => { if (tab === "progreso") AC.irHoy(sub); S.tab = tab; history.replaceState(null, "", "#" + tab); render(true); window.scrollTo(0, 0); } });
+/* Ir a una pestaña: en Progreso, a una subpestaña; en Ajustes, a un apartado (id) */
+function irA(tab, sub) {
+  if (tab === "progreso") AC.irHoy(sub);
+  S.tab = tab; history.replaceState(null, "", "#" + tab); render(true);
+  const el = tab === "ajustes" && sub ? document.getElementById(sub) : null;
+  if (el) el.scrollIntoView({ block: "start" }); else window.scrollTo(0, 0);
+}
+RS.init({ S, render: () => render(true), toast, esc, fecha, icon, irA });
+NB.init({ S, DB, DR, EN, render: () => render(true), toast, esc, fecha, icon, mensajeError, crearCopia, irA });
 CO.init({ S, DB, render: () => render(true), toast, esc, nf, fecha, icon, mensajeError,
   peso: () => S.ajustes ? pesoDeCalculo().valor : null,
   baseTotal: BASE.length,

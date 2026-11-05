@@ -439,3 +439,9 @@ body.con-hoja { overflow: hidden; }
 .medida-res small { font-size: 11px; }
 @media (max-width: 400px) { .medida:not(.medida-btn) { flex-wrap: wrap; } .medida:not(.medida-btn) .medida-nom { flex-basis: calc(100% - 52px); } .medida-val { margin-left: 48px; } }
 .medida-res .dif { color: var(--dim); font-size: 12px; }
+
+/* ---------- Google Drive y buzón (0.7.0) ---------- */
+.item.buzon { align-items: flex-start; }
+.item.buzon .item-main span { font-size: 14px; }
+.item.buzon.mal { border-color: var(--bad); }
+.aviso-buzon { display: inline-flex; gap: 6px; align-items: center; color: var(--warn); }

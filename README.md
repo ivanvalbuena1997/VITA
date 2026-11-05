@@ -15,6 +15,7 @@ ordenador con Firebase.
 | `js/comida.js` · `js/comida-calc.js` · `js/comida-base.js` | Comida: diario, semana, menús, alimentos, compra; cálculos; alimentos base |
 | `js/actividad.js` · `js/actividad-calc.js` | Progreso: pasos, sueño, peso, cardio y gasto con calibración |
 | `js/resumen.js` · `js/semana-calc.js` | Pantalla Hoy, resumen semanal y exportación para el entrenador IA |
+| `js/drive.js` · `js/nube.js` · `js/buzon-calc.js` · `js/drive-local.js` | Google Drive: copia semanal y buzón de entrada (lo que deja Claude para revisar); simulación para `?local` |
 | `js/db.js` · `js/db-local.js` | Firebase (Auth + Firestore con caché sin conexión) · sustituto en memoria para probar con `?local` |
 | `js/model.js` | Modelo de datos, grupos musculares y ajustes por defecto |
 | `js/import.js` | Importador de las copias de GYM-TRACKER y FitCoock (desde la 0.6.1 solo en el modo local de pruebas) |
@@ -38,6 +39,13 @@ Los documentos `dias/{fecha}` se escriben campo a campo (merge) porque también 
 app compañera de Android con los pasos y el sueño de Health Connect (`pasosFuente`,
 `sueno.fuente`: `health-connect` o `manual`; lo puesto a mano no se sobrescribe).
 
+## Google Drive
+
+Permiso `drive.file` (V.I.T.A. solo ve lo que crea). Requiere activar en el proyecto de Google Cloud
+la API de Google Drive y la de Google Sheets. Carpeta «V.I.T.A.»: `vita-copia-ultima.json`, las 8
+últimas copias con fecha y la hoja «V.I.T.A. buzón» (columnas id, escrito, tipo, datos JSON, nota,
+estado, detalle).
+
 ## Pruebas
 
 Con las copias reales fuera del repositorio:
@@ -49,6 +57,7 @@ node tests/test_actividad.mjs gym.json fitcoock.json   # entreno, cardio, gasto 
 node tests/test_semana.mjs    gym.json fitcoock.json   # resumen semanal y exportación
 node tests/test_sueno.mjs     gym.json fitcoock.json   # sueño: lectura de horas, resumen, relación con el día
 node tests/test_plan.mjs      gym.json fitcoock.json   # planificador: volumen, desde el historial, copiar, catálogo
+node tests/test_buzon.mjs     gym.json fitcoock.json   # buzón de Drive: validación de pesajes, medidas, comidas y menús
 ```
 
 Para probar la interfaz sin Firebase: servir la carpeta en `localhost` y abrir `/?local`.

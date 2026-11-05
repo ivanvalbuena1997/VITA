@@ -3,14 +3,16 @@
 import { COLECCIONES, CLAVE } from "./db-claves.js";
 
 const mem = { ajustes: null, compra: null, ...Object.fromEntries(COLECCIONES.map(c => [c, new Map()])) };
-let userCb = null, oyente = null;
+let userCb = null;
+const oyentes = new Set();   // varios a la vez: la app y, en las pruebas, quien quiera mirar
 const usuario = { uid: "local", email: "prueba@localhost" };
 
 const emitir = () => {
-  if (!oyente) return;
-  oyente("ajustes", mem.ajustes, false, false);
-  oyente("compra", mem.compra, false, false);
-  COLECCIONES.forEach(c => oyente(c, [...mem[c].values()], false, false));
+  oyentes.forEach(oyente => {
+    oyente("ajustes", mem.ajustes, false, false);
+    oyente("compra", mem.compra, false, false);
+    COLECCIONES.forEach(c => oyente(c, [...mem[c].values()], false, false));
+  });
 };
 
 export async function iniciarFirebase() { return {}; }
@@ -18,8 +20,8 @@ export const alCambiarUsuario = cb => { userCb = cb; cb(null); };
 export async function entrar() { userCb && userCb(usuario); }
 export async function entrarConToken() { userCb && userCb(usuario); }
 export const resultadoRedireccion = async () => null;
-export async function salir() { oyente = null; userCb && userCb(null); }
-export function escuchar(uid, onDatos) { oyente = onDatos; setTimeout(emitir, 50); return () => { oyente = null; }; }
+export async function salir() { oyentes.clear(); userCb && userCb(null); }
+export function escuchar(uid, onDatos) { oyentes.add(onDatos); setTimeout(emitir, 50); return () => { oyentes.delete(onDatos); }; }
 export async function guardarAjustes(uid, a) { mem.ajustes = JSON.parse(JSON.stringify(a)); setTimeout(emitir, 0); }
 export function sustituirTodo(uid, datos) {
   COLECCIONES.forEach(c => { mem[c] = new Map((datos[c] || []).map(x => [String(x[CLAVE[c]]), x])); });
