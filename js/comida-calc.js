@@ -339,3 +339,25 @@ export function baseNuevos(alimentos, vistos, reponer, crearId) {
   });
   return { nuevos, vistos: [...new Set([...(vistos || []), ...visto])] };
 }
+
+/* ---------- número de cada alimento (#1, #2…) ----------
+   Cada producto y plato tiene un número fijo («num»). La primera vez se numeran
+   así: primero los que traían código de la hoja de FitCoock (001, 002… → #1, #2…),
+   después el resto por orden de creación (el id empieza por la fecha). Los nuevos
+   reciben el siguiente al mayor que se haya usado nunca («ultimo»), así un
+   número no se repite aunque se borre el alimento. Si dos dispositivos dan el
+   mismo número a la vez, el alimento creado después recibe uno nuevo. */
+const numValido = v => Number.isInteger(v) && v > 0;
+export function numerar(alimentos, ultimo = 0) {
+  const vistos = new Set(), cambios = [];
+  const conNum = alimentos.filter(a => numValido(a.num)).sort((a, b) => a.num - b.num || (a.id < b.id ? -1 : 1));
+  const repetidos = [];
+  conNum.forEach(a => { if (vistos.has(a.num)) repetidos.push(a); else vistos.add(a.num); });
+  let max = Math.max(ultimo || 0, 0, ...vistos);
+  const cod = a => /^\d+$/.test(String(a.codigo || "")) ? parseInt(a.codigo, 10) : Infinity;
+  const pendientes = [...alimentos.filter(a => !numValido(a.num)), ...repetidos]
+    .sort((a, b) => cod(a) - cod(b) || (a.id < b.id ? -1 : 1));
+  pendientes.forEach(a => { a.num = ++max; cambios.push(a); });
+  return { cambios, ultimo: max };
+}
+export const textoNum = a => numValido(a.num) ? `#${a.num}` : "";

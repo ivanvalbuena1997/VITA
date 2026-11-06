@@ -72,7 +72,16 @@ function guardarCont(t) {
     C.DB.guardarDoc(u, "diario", t.fecha, limpio(c)).catch(fallo);
   } else C.DB.guardarDoc(u, "menus", c.id, limpio(c)).catch(fallo);
 }
-const guardarAlimento = a => C.DB.guardarDoc(C.S.user.uid, "alimentos", a.id, limpio(a)).catch(fallo);
+const guardarAlimento = a => { if (!a.num) numerarTodos(); return C.DB.guardarDoc(C.S.user.uid, "alimentos", a.id, limpio(a)).catch(fallo); };
+/* Buscar por número: «45» o «#45» encuentra el #45 exacto */
+const coincideNum = (a, q) => { const m = q.replace(/^#/, ""); return /^\d+$/.test(m) && a.num === parseInt(m, 10); };
+/* Pone número a los alimentos que no lo tienen (y arregla repetidos). Devuelve cuántos cambian. */
+export function numerarTodos() {
+  const ap = C.S.ajustes.app, r = K.numerar(C.S.alimentos, ap.ultimoNumAlimento || 0);
+  r.cambios.forEach(a => C.DB.guardarDoc(C.S.user.uid, "alimentos", a.id, limpio(a)).catch(fallo));
+  if (r.ultimo !== (ap.ultimoNumAlimento || 0)) { ap.ultimoNumAlimento = r.ultimo; C.DB.guardarAjustes(C.S.user.uid, C.S.ajustes).catch(() => {}); }
+  return r.cambios.length;
+}
 const guardarCompra = () => C.DB.guardarDoc(C.S.user.uid, "compra", "actual", limpio(C.S.compra)).catch(fallo);
 /* Tras cambiar un producto o plato: recalcula los platos y guarda los que cambien */
 function recalcularYGuardar(extra = []) {
@@ -282,7 +291,7 @@ function filtrarAlimentos() {
   if (F.tipo !== "todos") l = l.filter(a => F.tipo === "plato" ? K.esPlato(a) : !K.esPlato(a));
   if (F.superF !== "todos") l = l.filter(a => !K.esPlato(a) && (a.super || "generico") === F.superF);
   if (F.sinPrecio) l = l.filter(a => K.esPlato(a) ? a.precioIncompleto : !(K.num(a.precio) > 0));
-  if (q) l = l.filter(a => a.nombre.toLowerCase().includes(q) || String(a.codigo || "").includes(q) || (!K.esPlato(a) && (SUPER_INFO[a.super] || {}).n?.toLowerCase().includes(q)));
+  if (q) l = l.filter(a => a.nombre.toLowerCase().includes(q) || coincideNum(a, q) || (!K.esPlato(a) && (SUPER_INFO[a.super] || {}).n?.toLowerCase().includes(q)));
   const dens = (a, k) => K.num(a.kcal) > 0 ? K.num(a[k]) / K.num(a.kcal) * 100 : 0;
   const ord = { nombre: (a, b) => a.nombre.localeCompare(b.nombre, "es"), prot: (a, b) => dens(b, "prot") - dens(a, "prot"),
     hid: (a, b) => dens(b, "hid") - dens(a, "hid"), kcal: (a, b) => K.num(b.kcal) - K.num(a.kcal),
@@ -297,7 +306,7 @@ function listaAlimentosHTML() {
     const extra = F.orden === "prot" && K.num(a.kcal) > 0 ? `<span class="mp" style="--c:var(--prot)">${f1(a.prot / a.kcal * 100)} g P/100 kcal</span>`
       : F.orden === "hid" && K.num(a.kcal) > 0 ? `<span class="mp" style="--c:var(--hid)">${f1(a.hid / a.kcal * 100)} g H/100 kcal</span>` : "";
     return `<button class="item franja" style="--franja:${K.esPlato(a) ? "#FF9F43" : (SUPER_INFO[a.super] || SUPER_INFO.generico).c}" data-c="${K.esPlato(a) ? "abrir-plato" : "abrir-producto"}" data-id="${a.id}">
-      <span class="item-main"><b>${a.codigo ? `<span class="muted mono cod">#${esc(a.codigo)}</span> ` : ""}${esc(a.nombre)}</b>
+      <span class="item-main"><b>${a.num ? `<span class="muted mono cod">#${a.num}</span> ` : ""}${esc(a.nombre)}</b>
         <span class="tags">${superTag(a)}${K.num(a.precio) > 0 ? `<span class="tag line">${eur(K.num(a.precio))}/${u === "ml" ? "L" : "kg"}${a.precioIncompleto ? " ?" : ""}</span>` : ""}</span>
         <span class="mps">${pills(a, true)}${extra}</span></span>
       <span class="item-kcal mono">${f0(a.kcal)}<small>/100 ${u}</small></span></button>`;
@@ -306,7 +315,7 @@ function listaAlimentosHTML() {
 function vAlimentos() {
   return `<div class="card">
     <div class="btn-row"><button class="btn primary" data-c="nuevo-producto">${C.icon("mas", 18)}Producto</button><button class="btn primary" data-c="nuevo-plato">${C.icon("mas", 18)}Plato</button></div>
-    <input class="buscar" id="c-buscar" placeholder="Buscar por nombre, súper o código" value="${esc(F.q)}" autocomplete="off" aria-label="Buscar alimento">
+    <input class="buscar" id="c-buscar" placeholder="Buscar por nombre, súper o número (#12)" value="${esc(F.q)}" autocomplete="off" aria-label="Buscar alimento">
     <div class="seg"><button data-c="tipo" data-v="todos" aria-pressed="${F.tipo === "todos"}">Todos</button><button data-c="tipo" data-v="basico" aria-pressed="${F.tipo === "basico"}">Productos</button><button data-c="tipo" data-v="plato" aria-pressed="${F.tipo === "plato"}">Platos</button></div>
     <div class="grid2">
       <label class="campo">Dónde se compra<select id="c-super"><option value="todos">Cualquier sitio</option>${SUPERS.map(s => `<option value="${s}" ${F.superF === s ? "selected" : ""}>${SUPER_INFO[s].n}</option>`).join("")}</select></label>
@@ -361,7 +370,7 @@ const hist = () => K.historialPorciones(C.S.diario, sumarDias(hoyISO(), -180));
 function listaElegir() {
   const h = F.hoja, q = (h.q || "").trim().toLowerCase(), H = hist();
   let l = activos();
-  if (q) l = l.filter(a => a.nombre.toLowerCase().includes(q) || String(a.codigo || "").includes(q));
+  if (q) l = l.filter(a => a.nombre.toLowerCase().includes(q) || coincideNum(a, q));
   const usos = a => (H[a.id] && H[a.id].comidas[h.meal]) || 0;
   const habituales = q ? [] : l.filter(a => usos(a) > 0).sort((a, b) => usos(b) - usos(a)).slice(0, 8);
   const resto = l.filter(a => !habituales.includes(a)).sort((a, b) => a.nombre.localeCompare(b.nombre, "es")).slice(0, 80);
@@ -587,7 +596,7 @@ function prevPlato() {
 function listaIngredientes() {
   const h = F.hoja, mp = mapa(), q = (h.qIng || "").trim().toLowerCase();
   const l = activos().filter(a => !h.id || !K.dependeDe(a.id, h.id, mp))
-    .filter(a => !q || a.nombre.toLowerCase().includes(q) || String(a.codigo || "").includes(q))
+    .filter(a => !q || a.nombre.toLowerCase().includes(q) || coincideNum(a, q))
     .sort((a, b) => a.nombre.localeCompare(b.nombre, "es")).slice(0, 80);
   return l.length ? l.map(a => `<button class="item" data-c="ing-id" data-id="${a.id}"><span class="item-main"><b>${esc(a.nombre)}</b><span class="tags">${superTag(a)}</span></span><span class="item-kcal mono">${f0(a.kcal)}<small>/100</small></span></button>`).join("") : `<p class="muted">Nada coincide.</p>`;
 }
@@ -595,13 +604,13 @@ function listaIngredientes() {
 /* ================= acciones ================= */
 function abrirProducto(id, datos) {
   const a = id ? mapa()[id] : null;
-  abrirHoja({ tipo: "producto", titulo: a ? "Editar producto" : "Nuevo producto", id, paso: "form",
+  abrirHoja({ tipo: "producto", titulo: a ? `Editar producto${a.num ? ` · #${a.num}` : ""}` : "Nuevo producto", id, paso: "form",
     datos: datos || (a ? { nombre: a.nombre, super: a.super || "generico", unidad: K.unidad(a), precio: a.precio || "", factor: a.factor || "", kcal: a.kcal, prot: a.prot, hid: a.hid, gra: a.gra, fib: a.fib }
       : { nombre: "", super: "generico", unidad: "g", precio: "", factor: "", kcal: "", prot: "", hid: "", gra: "", fib: "" }) });
 }
 function abrirPlato(id) {
   const p = id ? mapa()[id] : null;
-  abrirHoja({ tipo: "plato", titulo: p ? "Editar plato" : "Nuevo plato", id, buscando: null,
+  abrirHoja({ tipo: "plato", titulo: p ? `Editar plato${p.num ? ` · #${p.num}` : ""}` : "Nuevo plato", id, buscando: null,
     datos: p ? { nombre: p.nombre, ingredientes: (p.ingredientes || []).map(i => ({ ...i })), pesoFinal: p.pesoFinal || "", raciones: p.raciones || 1, aceiteId: p.aceiteId || null }
       : { nombre: "", ingredientes: [{ id: "", g: "" }], pesoFinal: "", raciones: 1, aceiteId: null } });
 }

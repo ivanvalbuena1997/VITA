@@ -57,7 +57,8 @@ node tests/test_actividad.mjs gym.json fitcoock.json   # entreno, cardio, gasto 
 node tests/test_semana.mjs    gym.json fitcoock.json   # resumen semanal y exportación
 node tests/test_sueno.mjs     gym.json fitcoock.json   # sueño: lectura de horas, resumen, relación con el día
 node tests/test_plan.mjs      gym.json fitcoock.json   # planificador: volumen, desde el historial, copiar, catálogo
-node tests/test_buzon.mjs     gym.json fitcoock.json   # buzón de Drive: validación de pesajes, medidas, comidas y menús
+node tests/test_buzon.mjs     gym.json fitcoock.json   # buzón de Drive: validación de pesajes, medidas, comidas, menús y alimentos
+node tests/test_numeros.mjs   gym.json fitcoock.json   # número fijo de cada alimento (#1, #2…)
 ```
 
 Para probar la interfaz sin Firebase: servir la carpeta en `localhost` y abrir `/?local`.

@@ -511,6 +511,13 @@ async function arrancar() {
         const n = CO.sincronizarBase();
         if (n) toast(`${n} alimentos base nuevos añadidos.`);
       }
+      // Número de cada alimento (#1, #2…): a los que no lo tengan o lo tengan repetido
+      if (S.cargado && delServidor.has("alimentos") && delServidor.has("ajustes")) {
+        const nums = S.alimentos.map(x => x.num);
+        if (nums.some(v => !(Number.isInteger(v) && v > 0)) || new Set(nums).size !== nums.length) {
+          const n = CO.numerarTodos(); if (n > 20) toast(`${n} alimentos numerados (#1, #2…).`);
+        }
+      }
       render();
     }, e => pantallaLogin(mensajeError(e)));
   });
