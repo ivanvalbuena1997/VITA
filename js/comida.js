@@ -72,14 +72,45 @@ function guardarCont(t) {
     C.DB.guardarDoc(u, "diario", t.fecha, limpio(c)).catch(fallo);
   } else C.DB.guardarDoc(u, "menus", c.id, limpio(c)).catch(fallo);
 }
-const guardarAlimento = a => { if (!a.num) numerarTodos(); return C.DB.guardarDoc(C.S.user.uid, "alimentos", a.id, limpio(a)).catch(fallo); };
+const guardarAlimento = a => { darNumero(a); return C.DB.guardarDoc(C.S.user.uid, "alimentos", a.id, limpio(a)).catch(fallo); };
 /* Buscar por número: «45» o «#45» encuentra el #45 exacto */
 const coincideNum = (a, q) => { const m = q.replace(/^#/, ""); return /^\d+$/.test(m) && a.num === parseInt(m, 10); };
-/* Pone número a los alimentos que no lo tienen (y arregla repetidos). Devuelve cuántos cambian. */
-export function numerarTodos() {
-  const ap = C.S.ajustes.app, r = K.numerar(C.S.alimentos, ap.ultimoNumAlimento || 0);
-  r.cambios.forEach(a => C.DB.guardarDoc(C.S.user.uid, "alimentos", a.id, limpio(a)).catch(fallo));
-  if (r.ultimo !== (ap.ultimoNumAlimento || 0)) { ap.ultimoNumAlimento = r.ultimo; C.DB.guardarAjustes(C.S.user.uid, C.S.ajustes).catch(() => {}); }
+/* Número de cada alimento (#1, #2…).
+   Un alimento nuevo recibe su número ANTES de guardarse y va en la misma
+   escritura: así nunca llega a la base de datos un alimento sin número. (Fallo
+   de la 0.7.3: se guardaban sin número y cada aviso de cambio volvía a numerar
+   los pendientes, con lo que los números se disparaban.) */
+let ajustesNumPendientes = false;
+export function darNumero(a) {
+  if (Number.isInteger(a.num) && a.num > 0) return;
+  const ap = C.S.ajustes.app;
+  a.num = K.siguienteNum(C.S.alimentos.filter(x => x !== a), ap.ultimoNumAlimento);
+  ap.ultimoNumAlimento = a.num;
+  if (ajustesNumPendientes) return;   // varios seguidos (alimentos base): un solo guardado del contador
+  ajustesNumPendientes = true;
+  setTimeout(() => {
+    ajustesNumPendientes = false;
+    const ap2 = C.S.ajustes.app;
+    ap2.ultimoNumAlimento = K.siguienteNum(C.S.alimentos, ap2.ultimoNumAlimento) - 1;
+    C.DB.guardarAjustes(C.S.user.uid, C.S.ajustes).catch(fallo);
+  }, 0);
+}
+/* Arreglo de los que no tengan número o lo tengan repetido (copias antiguas,
+   dos dispositivos a la vez), todo en UN lote. «desdeCero» renumera todo 1..n,
+   una sola vez (arreglo de la 0.7.3, marca ajustes.app.numeracion = 2). */
+let numerando = false;
+export const NUMERACION = 2;
+export function numerarTodos(desdeCero = false) {
+  if (numerando) return 0;
+  const ap = C.S.ajustes.app, r = K.numerar(C.S.alimentos, desdeCero ? 0 : ap.ultimoNumAlimento || 0, desdeCero);
+  const cambiaAjustes = r.ultimo !== (ap.ultimoNumAlimento || 0) || (desdeCero && ap.numeracion !== NUMERACION);
+  if (!r.cambios.length && !cambiaAjustes) return 0;
+  numerando = true;
+  ap.ultimoNumAlimento = r.ultimo; if (desdeCero) ap.numeracion = NUMERACION;
+  Promise.all([
+    r.cambios.length ? C.DB.guardarVarios(C.S.user.uid, "alimentos", r.cambios.map(a => [a.id, limpio(a)])) : null,
+    cambiaAjustes ? C.DB.guardarAjustes(C.S.user.uid, C.S.ajustes) : null
+  ]).catch(fallo).finally(() => { numerando = false; });
   return r.cambios.length;
 }
 const guardarCompra = () => C.DB.guardarDoc(C.S.user.uid, "compra", "actual", limpio(C.S.compra)).catch(fallo);

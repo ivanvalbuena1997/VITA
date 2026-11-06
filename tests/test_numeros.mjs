@@ -27,6 +27,29 @@ ok(A[A.length - 1].num === ult + 1, "no reutiliza números borrados");
 A.push({ id: "zzzz-dup", tipo: "basico", nombre: "Dup", num: A[A.length - 1].num });
 r2 = K.numerar(A, r2.ultimo);
 ok(r2.cambios.length === 1 && r2.cambios[0].id === "zzzz-dup" && new Set(A.map(a => a.num)).size === A.length, "repetido arreglado");
+// Arreglo de la 0.7.3: números disparados → renumerar de 1 a n conservando el orden de la primera numeración
+const real = process.argv[4] ? JSON.parse(fs.readFileSync(process.argv[4])).datos.alimentos : null;
+if (real) {
+  const antes = Math.max(...real.map(a => a.num || 0));
+  const rr = K.numerar(real, 3225, true);
+  const nums = real.map(a => a.num).sort((x, y) => x - y);
+  ok(rr.ultimo === real.length && nums[0] === 1 && nums[nums.length - 1] === real.length && new Set(nums).size === real.length, "renumerado 1..n");
+  const cc = real.filter(a => /^\d+$/.test(a.codigo || ""));
+  ok(cc.every(a => a.num === parseInt(a.codigo, 10)), "los de la hoja vuelven a su código");
+  ok(K.numerar(real, rr.ultimo).cambios.length === 0, "después, nada que hacer");
+  console.log(`copia real: ${real.length} alimentos, máximo antes #${antes}, ahora #${rr.ultimo}; aceite: ${real.filter(a => /aceite/i.test(a.nombre)).map(a => `#${a.num} ${a.nombre}`).join(" · ")}`);
+}
 console.log(`numerados ${A.length}, con código de la hoja ${conCod.length} (seguidos: ${seguidos})`);
+// 0.7.4: número de un alimento nuevo = siguiente al mayor (o al contador)
+{
+  const { siguienteNum } = await import("../js/comida-calc.js");
+  const ok = (c, m) => { if (!c) { console.error("FALLO:", m); process.exit(1); } };
+  ok(siguienteNum([], 0) === 1, "vacío → 1");
+  ok(siguienteNum([{ num: 3 }, { num: 7 }, {}], 5) === 8, "mayor num + 1");
+  ok(siguienteNum([{ num: 3 }], 10) === 11, "contador mayor + 1");
+  ok(siguienteNum([{ num: 0 }, { num: 2.5 }, { num: "4" }], 0) === 1, "ignora números no válidos");
+  console.log("siguienteNum OK");
+}
+
 console.log(fallos ? `${fallos} FALLOS` : "TODO CORRECTO");
 process.exit(fallos ? 1 : 0);

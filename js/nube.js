@@ -66,7 +66,11 @@ async function guardar(item) {
   const c = v.cambios, uid = C.S.user.uid;
   if (c.col === "dias") await C.DB.actualizarDoc(uid, "dias", c.id, c.campos);
   else if (c.col === "diario") await C.DB.guardarDoc(uid, "diario", c.id, JSON.parse(JSON.stringify(c.doc)));
-  else if (c.col === "menus" || c.col === "alimentos") { const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7); await C.DB.guardarDoc(uid, c.col, id, { id, ...c.doc }); }
+  else if (c.col === "menus" || c.col === "alimentos") {
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7), doc = { id, ...c.doc };
+    if (c.col === "alimentos") C.darNumero(doc);   // con su número ya puesto, en la misma escritura
+    await C.DB.guardarDoc(uid, c.col, id, doc);
+  }
   await C.DR.marcarFila(aj(), item.e.fila, `aplicado ${hoyISO()}`, v.titulo);
   N.entradas = N.entradas.filter(x => x !== item);
 }

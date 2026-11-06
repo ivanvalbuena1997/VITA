@@ -4,6 +4,7 @@ import { COLECCIONES, CLAVE } from "./db-claves.js";
 
 const mem = { ajustes: null, compra: null, ...Object.fromEntries(COLECCIONES.map(c => [c, new Map()])) };
 let userCb = null;
+let cola = Promise.resolve();   // escrituras sueltas en orden, como Firestore
 const oyentes = new Set();   // varios a la vez: la app y, en las pruebas, quien quiera mirar
 const usuario = { uid: "local", email: "prueba@localhost" };
 
@@ -24,15 +25,25 @@ export async function salir() { oyentes.clear(); userCb && userCb(null); }
 export function escuchar(uid, onDatos) { oyentes.add(onDatos); setTimeout(emitir, 50); return () => { oyentes.delete(onDatos); }; }
 export async function guardarAjustes(uid, a) { mem.ajustes = JSON.parse(JSON.stringify(a)); setTimeout(emitir, 0); }
 export function sustituirTodo(uid, datos) {
-  COLECCIONES.forEach(c => { mem[c] = new Map((datos[c] || []).map(x => [String(x[CLAVE[c]]), x])); });
-  mem.ajustes = datos.ajustes; mem.compra = datos.compra;
-  setTimeout(emitir, 0);
-  return { operaciones: COLECCIONES.reduce((a, c) => a + mem[c].size, 2), confirmado: Promise.resolve() };
+  const d = JSON.parse(JSON.stringify(datos));
+  cola = cola.then(() => new Promise(res => setTimeout(() => {   // detrás de las escrituras pendientes, como en Firestore
+    COLECCIONES.forEach(c => { mem[c] = new Map((d[c] || []).map(x => [String(x[CLAVE[c]]), x])); });
+    mem.ajustes = d.ajustes; mem.compra = d.compra;
+    emitir(); res();
+  }, 0)));
+  return { operaciones: COLECCIONES.reduce((a, c) => a + (d[c] || []).length, 2), confirmado: cola };
 }
 
-export async function guardarDoc(uid, col, id, datos) {
-  if (col === "ajustes") mem.ajustes = datos; else if (col === "compra") mem.compra = datos; else mem[col].set(String(id), JSON.parse(JSON.stringify(datos)));
-  setTimeout(emitir, 0);
+/* Como Firestore: cada escritura suelta se aplica y avisa por separado (si se
+   guardan 100 documentos uno a uno, llegan 100 avisos con los datos a medias).
+   Un lote (guardarVarios) se aplica y avisa de una vez. */
+export function guardarDoc(uid, col, id, datos) {
+  const copia = JSON.parse(JSON.stringify(datos));
+  cola = cola.then(() => new Promise(res => setTimeout(() => {
+    if (col === "ajustes") mem.ajustes = copia; else if (col === "compra") mem.compra = copia; else mem[col].set(String(id), copia);
+    emitir(); res();
+  }, 0)));
+  return cola;
 }
 export async function actualizarDoc(uid, col, id, campos) {
   const d = { ...(mem[col].get(String(id)) || {}) };

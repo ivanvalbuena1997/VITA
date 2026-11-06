@@ -476,7 +476,7 @@ async function arrancar() {
     S.user = user; S.cargado = false; esqueleto(); render(); DR.preparar();
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().then(v => { S.persistente = v; }).catch(() => {});
     const recibidos = new Set(), delServidor = new Set();
-    let baseHecha = false;
+    let baseHecha = false, revisarNumeros = null;
     pararEscucha = DB.escuchar(user.uid, (nombre, valor, pendiente, desdeCache, error) => {
       if (nombre === "planes") {   // colección nueva: no cuenta para «cargado» y, si falla, la app sigue
         S.planes = valor || []; S.errorPlanes = error ? mensajeError(error) : null; S.pendiente.planes = pendiente;
@@ -511,12 +511,19 @@ async function arrancar() {
         const n = CO.sincronizarBase();
         if (n) toast(`${n} alimentos base nuevos añadidos.`);
       }
-      // Número de cada alimento (#1, #2…): a los que no lo tengan o lo tengan repetido
+      // Número de cada alimento (#1, #2…): arreglo de los que no lo tengan o lo tengan repetido.
+      // Se espera medio segundo sin avisos nuevos: cada colección avisa por separado y,
+      // justo tras restaurar una copia, los ajustes y los alimentos pueden no ir a la par.
       if (S.cargado && delServidor.has("alimentos") && delServidor.has("ajustes")) {
-        const nums = S.alimentos.map(x => x.num);
-        if (nums.some(v => !(Number.isInteger(v) && v > 0)) || new Set(nums).size !== nums.length) {
-          const n = CO.numerarTodos(); if (n > 20) toast(`${n} alimentos numerados (#1, #2…).`);
-        }
+        clearTimeout(revisarNumeros);
+        revisarNumeros = setTimeout(() => {
+          if (!S.cargado || !S.ajustes) return;
+          const nums = S.alimentos.map(x => x.num);
+          if (S.ajustes.app.numeracion !== CO.NUMERACION) {
+            // Arreglo de la 0.7.3 (números disparados): se renumera todo de 1 a n una sola vez
+            const n = CO.numerarTodos(true); if (n) { toast(`Alimentos renumerados del #1 al #${S.alimentos.length}.`, 5000); render(); }
+          } else if (nums.some(v => !(Number.isInteger(v) && v > 0)) || new Set(nums).size !== nums.length) { CO.numerarTodos(); render(); }
+        }, 500);
       }
       render();
     }, e => pantallaLogin(mensajeError(e)));
@@ -564,7 +571,7 @@ function irA(tab, sub) {
   if (el) el.scrollIntoView({ block: "start" }); else window.scrollTo(0, 0);
 }
 RS.init({ S, render: () => render(true), toast, esc, fecha, icon, irA });
-NB.init({ S, DB, DR, EN, render: () => render(true), toast, esc, fecha, icon, mensajeError, crearCopia, irA });
+NB.init({ S, DB, DR, EN, render: () => render(true), toast, esc, fecha, icon, mensajeError, crearCopia, irA, darNumero: a => CO.darNumero(a) });
 CO.init({ S, DB, render: () => render(true), toast, esc, nf, fecha, icon, mensajeError,
   peso: () => S.ajustes ? pesoDeCalculo().valor : null,
   baseTotal: BASE.length,

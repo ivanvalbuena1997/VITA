@@ -348,8 +348,16 @@ export function baseNuevos(alimentos, vistos, reponer, crearId) {
    número no se repite aunque se borre el alimento. Si dos dispositivos dan el
    mismo número a la vez, el alimento creado después recibe uno nuevo. */
 const numValido = v => Number.isInteger(v) && v > 0;
-export function numerar(alimentos, ultimo = 0) {
+/* Número para un alimento nuevo: el siguiente al mayor que haya (o al contador, si es mayor) */
+export const siguienteNum = (alimentos, ultimo = 0) => Math.max(ultimo || 0, 0, ...alimentos.map(a => numValido(a.num) ? a.num : 0)) + 1;
+export function numerar(alimentos, ultimo = 0, desdeCero = false) {
   const vistos = new Set(), cambios = [];
+  if (desdeCero) {   // renumerar todo: 1..n en el orden de la primera numeración
+    const antes = new Map(alimentos.map(a => [a.id, a.num]));
+    alimentos.forEach(a => { delete a.num; });
+    const r = numerar(alimentos, 0);
+    return { cambios: alimentos.filter(a => antes.get(a.id) !== a.num), ultimo: r.ultimo };
+  }
   const conNum = alimentos.filter(a => numValido(a.num)).sort((a, b) => a.num - b.num || (a.id < b.id ? -1 : 1));
   const repetidos = [];
   conNum.forEach(a => { if (vistos.has(a.num)) repetidos.push(a); else vistos.add(a.num); });
