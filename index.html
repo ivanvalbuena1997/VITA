@@ -18,12 +18,14 @@
 </script>
 </head>
 <body>
-<div class="login"><p class="muted">Cargando V.I.T.A.…</p></div>
+<!-- Mismo dibujo que logoCarga() en js/icons.js -->
+<div class="cargando-vita" role="status"><svg width="120" height="120" viewBox="0 0 240 240" aria-hidden="true" class="logo-carga">
+  <circle cx="120" cy="120" r="104" fill="none" stroke="var(--acc)" stroke-width="10" opacity="0.5"/>
+  <path d="M28 124 H76 L86 106 L96 124 L120 176 L152 64 L164 124 H212" fill="none" stroke="var(--acc)" stroke-width="18" stroke-linejoin="miter" stroke-linecap="square"/>
+</svg><span class="sr-only">Cargando V.I.T.A.</span></div>
 <noscript><p style="padding:24px">V.I.T.A. necesita JavaScript.</p></noscript>
 <script>
   // Si hay una versión nueva ya descargada, se aplica al abrir la app.
-  // Este archivo siempre llega fresco de la red, así que también rescata
-  // versiones antiguas de la app que no llegaban a mostrar el aviso.
   if ("serviceWorker" in navigator && location.search.indexOf("local") < 0) {
     var vitaRecarga = false, vitaHabia = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.addEventListener("controllerchange", function () { if (vitaHabia && !vitaRecarga) { vitaRecarga = true; location.reload(); } });

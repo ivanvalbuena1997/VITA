@@ -6,7 +6,7 @@
 import { APP_VERSION, ajustesPorDefecto, hoyISO, edadEn } from "./model.js";
 import { importarCopias } from "./import.js";
 import { crearCopia, esCopiaVita, descargar } from "./backup.js";
-import { icon, logo } from "./icons.js";
+import { icon, logo, logoCarga } from "./icons.js";
 import * as EN from "./entreno.js";
 import * as CO from "./comida.js";
 import * as AC from "./actividad.js";
@@ -21,6 +21,18 @@ import { GOOGLE_CLIENT_ID } from "./config.js";
 const MODO_LOCAL = location.hostname === "localhost" && new URLSearchParams(location.search).has("local");
 const DB = MODO_LOCAL ? await import("./db-local.js") : await import("./db.js");
 const DR = MODO_LOCAL ? await import("./drive-local.js") : await import("./drive.js");
+
+/* Tiempos de arranque (ms desde que se abre la página), para ver en Ajustes dónde se va el tiempo.
+   Se guarda el último de este dispositivo (solo aquí, no se sincroniza). */
+const ARRANQUE = { pagina: Math.round(performance.now()) };
+let arranqueAnterior = null;
+try { arranqueAnterior = JSON.parse(localStorage.getItem("vita:arranque") || "null"); } catch {}
+function marca(k) {
+  if (k in ARRANQUE) return;
+  ARRANQUE[k] = Math.round(performance.now());
+  if (k === "servidor") try { localStorage.setItem("vita:arranque", JSON.stringify({ ...ARRANQUE, fecha: new Date().toISOString(), version: APP_VERSION })); } catch {}
+}
+window.__vitaArranque = ARRANQUE;
 
 const S = {
   user: null, ajustes: null, compra: null,
@@ -254,7 +266,8 @@ function render(forzar = false) {
   $("tema").innerHTML = icon(temaActual() === "claro" ? "luna" : "sol", 20);
   $("tabs").innerHTML = TABS.map(t => `<button class="tab" data-tab="${t.id}" ${S.tab === t.id ? 'aria-current="page"' : ""}>${icon(t.id, 24)}<span>${t.label}</span></button>`).join("");
   const vista = { hoy: vHoy, entreno: vEntreno, comida: vComida, progreso: vProgreso, ajustes: vAjustes }[S.tab] || vHoy;
-  $("main").innerHTML = S.cargado ? vista() : `<div class="card"><p class="muted" style="margin:0">Cargando tus datos…</p></div>`;
+  if (S.cargado) $("main").innerHTML = vista();
+  else if (!$("main").querySelector(".cargando-vita")) $("main").innerHTML = logoCarga(96);   // sin reiniciar la animación en cada aviso
   aplicarPlegables();
 }
 
@@ -330,7 +343,20 @@ function vAjustes() {
     <p class="muted" style="margin:0">Restaurar sustituye todo lo que hay en V.I.T.A. por lo de la copia. Antes se descarga sola una copia de lo actual. La importación de GYM-TRACKER y FitCoock está desactivada: V.I.T.A. ya es tu app principal.</p>
     ${imp ? vistaImportacion(imp) : ""}
   </div>
-  <p class="muted" style="text-align:center">V.I.T.A. v${APP_VERSION}${MODO_LOCAL ? " · modo local" : ""}</p>`;
+  <p class="muted" style="text-align:center">V.I.T.A. v${APP_VERSION}${MODO_LOCAL ? " · modo local" : ""}</p>
+  ${textoArranque()}`;
+}
+/* «Arranque: Firebase 0,4 s · sesión 0,6 s · tus datos 0,9 s · servidor 1,8 s» (este dispositivo) */
+const seg = ms => `${nf(ms / 1000, 1)} s`;
+function lineaArranque(t) {
+  return [["firebase", "Firebase"], ["sesion", "sesión"], ["datos", "tus datos"], ["servidor", "servidor"]]
+    .filter(([k]) => Number.isFinite(t[k])).map(([k, n]) => `${n} ${seg(t[k])}`).join(" · ");
+}
+function textoArranque() {
+  const ahora = lineaArranque(ARRANQUE);
+  if (!ahora) return "";
+  const ant = arranqueAnterior && lineaArranque(arranqueAnterior);
+  return `<p class="muted" style="text-align:center;font-size:13px;margin-top:-6px">Arranque en este dispositivo: ${esc(ahora)}${ARRANQUE.servidor ? "" : " · servidor: esperando…"}${ant ? `<br>Anterior (${esc(fecha(arranqueAnterior.fecha.slice(0, 10)))}): ${esc(ant)}` : ""}</p>`;
 }
 
 function vistaImportacion(imp) {
@@ -464,13 +490,14 @@ window.addEventListener("hashchange", () => { const h = location.hash.slice(1); 
 let pararEscucha = null;
 async function arrancar() {
   aplicarTema();
-  try { await DB.iniciarFirebase(); }
+  try { await DB.iniciarFirebase(); marca("firebase"); }
   catch (e) {
     pantallaLogin("No se pudo cargar Firebase. La primera vez la app necesita conexión a internet.");
     return;
   }
   DB.resultadoRedireccion().catch(e => { if (!S.user) pantallaLogin(mensajeError(e)); });
   DB.alCambiarUsuario(user => {
+    marca("sesion");
     if (pararEscucha) { pararEscucha(); pararEscucha = null; }
     if (!user) { S.user = null; pantallaLogin(); return; }
     S.user = user; S.cargado = false; esqueleto(); render(); DR.preparar();
@@ -505,6 +532,7 @@ async function arrancar() {
       else S[nombre] = valor;
       recibidos.add(nombre);
       S.cargado = recibidos.size >= 8 && !!S.ajustes;
+      if (S.cargado) { marca("datos"); if (delServidor.size >= 8) marca("servidor"); }
       // Alimentos base nuevos: solo con los datos ya confirmados por el servidor
       if (!baseHecha && S.cargado && delServidor.has("alimentos") && delServidor.has("ajustes")) {
         baseHecha = true;

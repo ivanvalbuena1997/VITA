@@ -1,7 +1,7 @@
 /* V.I.T.A. — service worker.
    IMPORTANTE: sube VERSION cada vez que cambie cualquier archivo de la app;
    así el móvil detecta la versión nueva y muestra el aviso «Actualizar». */
-const VERSION = "vita-0.7.4";
+const VERSION = "vita-0.7.5";
 const FIREBASE = "vita-firebase-13.0.0";   // cambia si cambia FIREBASE_SDK en js/config.js
 
 const APP = [
@@ -46,17 +46,11 @@ self.addEventListener("fetch", e => {
   }
   if (url.origin !== self.location.origin) return;   // Firestore, Auth, Google: siempre a la red
 
-  // La página: primero la red (para ver versiones nuevas), si no hay, la copia guardada
-  // Si la red tarda más de 3 s (mala cobertura en el gimnasio), se abre la copia guardada
+  // La página: la copia guardada de esta versión, al momento (antes se esperaba a la
+  // red hasta 3 s). Las versiones nuevas las sigue detectando el navegador al
+  // comprobar sw.js, y la app avisa con «Actualizar».
   if (req.mode === "navigate") {
-    e.respondWith(new Promise(resolver => {
-      let hecho = false;
-      const dar = r => { if (!hecho && r) { hecho = true; resolver(r); } };
-      const guardada = () => caches.match("./index.html", { ignoreSearch: true });
-      const t = setTimeout(() => guardada().then(dar), 3000);
-      fetch(req).then(r => { clearTimeout(t); dar(r); })
-        .catch(() => guardada().then(r => dar(r || Response.error())));
-    }));
+    e.respondWith(caches.match("./index.html", { ignoreSearch: true }).then(hit => hit || fetch(req)));
     return;
   }
   // El resto de la app: la copia de esta versión

@@ -132,6 +132,16 @@ main { flex: 1; width: 100%; max-width: 760px; margin: 0 auto; padding: 14px 16p
 }
 
 /* ---------- pantalla de entrada ---------- */
+/* Espera de carga: logo con el latido en bucle (index.html y «cargando tus datos») */
+.cargando-vita { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+main .cargando-vita { min-height: 55vh; }
+.logo-carga { filter: drop-shadow(0 0 10px var(--acc-soft)); }
+@media (prefers-reduced-motion: no-preference) {
+  .logo-carga path { stroke-dasharray: 400; stroke-dashoffset: 400; animation: latido 1.8s cubic-bezier(.45, 0, .55, 1) infinite; }
+  .logo-carga circle { animation: halo 1.8s ease-in-out infinite; }
+  @keyframes latido { 0% { stroke-dashoffset: 400; } 55% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -400; } }
+  @keyframes halo { 0%, 100% { opacity: 0.3; } 55% { opacity: 0.7; } }
+}
 .login { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; padding: 24px; text-align: center; }
 .login .brand-name { font-size: 34px; letter-spacing: 0.18em; text-shadow: var(--glow); }
 .login p { margin: 0; color: var(--dim); max-width: 340px; }

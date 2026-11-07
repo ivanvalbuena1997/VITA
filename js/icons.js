@@ -32,6 +32,12 @@ export const icon = (nombre, size = 24, color = "currentColor") =>
   `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${ICON[nombre]}"/></svg>`;
 
 /* Logo P3 · Monitor (versión compacta para cabecera e iconos) */
+/* Logo animado para las esperas: el trazo del latido se dibuja y se borra en bucle.
+   (index.html lleva una copia del mismo dibujo para la primera pantalla.) */
+export const logoCarga = (size = 120) => `<div class="cargando-vita" role="status"><svg width="${size}" height="${size}" viewBox="0 0 240 240" aria-hidden="true" class="logo-carga">
+  <circle cx="120" cy="120" r="104" fill="none" stroke="var(--acc)" stroke-width="10" opacity="0.5"/>
+  <path d="M28 124 H76 L86 106 L96 124 L120 176 L152 64 L164 124 H212" fill="none" stroke="var(--acc)" stroke-width="18" stroke-linejoin="miter" stroke-linecap="square"/>
+</svg><span class="sr-only">Cargando V.I.T.A.</span></div>`;
 export const logo = (size = 30) => `<svg width="${size}" height="${size}" viewBox="0 0 240 240" aria-hidden="true" class="pulse">
   <circle cx="120" cy="120" r="104" fill="none" stroke="var(--acc)" stroke-width="10" opacity="0.5"/>
   <path d="M28 124 H76 L86 106 L96 124 L120 176 L152 64 L164 124 H212" fill="none" stroke="var(--acc)" stroke-width="18" stroke-linejoin="miter" stroke-linecap="square"/>

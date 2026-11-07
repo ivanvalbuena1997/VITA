@@ -21,7 +21,11 @@ export async function iniciarFirebase() {
     import(base + "firebase-firestore.js")
   ]);
   const app = a.initializeApp(firebaseConfig);
-  const auth = au.getAuth(app);
+  // Sin «popupRedirectResolver» al iniciar: con getAuth(), en el móvil la sesión
+  // esperaba a cargar un script e iframe de Google (apis.google.com) antes de dar
+  // el usuario, y con mala cobertura eso retrasaba todo el arranque. Solo se usa
+  // al entrar con ventana o redirección (abajo).
+  const auth = au.initializeAuth(app, { persistence: [au.indexedDBLocalPersistence, au.browserLocalPersistence, au.browserSessionPersistence] });
   let db;
   try {
     db = fs.initializeFirestore(app, {
@@ -45,10 +49,10 @@ export async function entrar() {
   const prov = new F.au.GoogleAuthProvider();
   prov.setCustomParameters({ prompt: "select_account" });
   try {
-    await F.au.signInWithPopup(F.auth, prov);
+    await F.au.signInWithPopup(F.auth, prov, F.au.browserPopupRedirectResolver);
   } catch (e) {
     const usarRedireccion = ["auth/popup-blocked", "auth/operation-not-supported-in-this-environment"].includes(e && e.code);
-    if (usarRedireccion) await F.au.signInWithRedirect(F.auth, prov);
+    if (usarRedireccion) await F.au.signInWithRedirect(F.auth, prov, F.au.browserPopupRedirectResolver);
     else throw e;
   }
 }
@@ -56,7 +60,7 @@ export async function entrar() {
 export async function entrarConToken(idToken) {
   await F.au.signInWithCredential(F.auth, F.au.GoogleAuthProvider.credential(idToken));
 }
-export const resultadoRedireccion = () => F.au.getRedirectResult(F.auth);
+export const resultadoRedireccion = () => F.au.getRedirectResult(F.auth, F.au.browserPopupRedirectResolver);
 export const salir = () => F.au.signOut(F.auth);
 
 /* Escucha todo lo del usuario. onDatos(nombre, valor, pendiente, desdeCache) */
